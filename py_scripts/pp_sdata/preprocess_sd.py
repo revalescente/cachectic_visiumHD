@@ -1,23 +1,23 @@
 from spatialdata_io import visium_hd
-from spatialdata.models import (ShapesModel, TableModel)
+from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
+from spatialdata.models._utils import get_channel_names, set_channel_names
 from spatialdata import SpatialData
 import spatialdata as sd
-import spatialdata_plot
 from spatialdata.transformations import (
-    Affine,
     Identity,
     get_transformation,
     set_transformation,
 )
-import math
+from shapely.affinity import scale
+from shapely import union_all
+from anndata import AnnData
+from skimage import imread
+import squidpy as sq
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
-from shapely.affinity import scale
-import squidpy as sq
-from shapely import union_all
-import numpy as np
-from anndata import AnnData
-import pandas as pd
+import math
 
 # reading data with visium reader
 spe = visium_hd(path = '/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out/blocco1/outs', 
@@ -27,7 +27,7 @@ spe = visium_hd(path = '/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/
                 bins_as_squares=True, 
                 annotate_table_by_labels=False, 
                 fullres_image_file='/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/Images/HE/Project_Blocco1_20x.tif', 
-                load_all_images=True, 
+                load_all_images=False, 
                 var_names_make_unique=True)
 
 # write the data to disk
@@ -101,5 +101,14 @@ set_transformation(filtered.shapes['blocco1_intissue'], transf, to_coordinate_sy
 
 # save the new object
 filtered.write("b1_filtered.zarr")
-# filtered = read_zarr("b1_filtered.zarr")
 
+
+# Read filtered and cleaned data
+filtered = sd.read_zarr(os.path.expanduser("~/data/b1_cleaned.zarr")) # non mi chiedere perché 
+
+# add convolved image
+conv_img = imread(os.path.expanduser("~/HE_images/preprocessed/convolved_blocco1_20x.tif"))
+conv_img = np.expand_dims(image, axis=0)
+conv_img_parsed = Image2DModel.parse(conv_img, dims=("c", "y", "x"),  transformations={'blocco1': Identity()}, c_coords = "conv")
+filtered['blocco1_conv_image'] = conv_img_parsed
+filtered.write_element("blocco1_conv_image")
