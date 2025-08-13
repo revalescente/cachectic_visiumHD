@@ -19,6 +19,13 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import math
 
+# to add elements in the zarr store:
+# sdata.write_element(["element1", "element2"])
+# delete element from memory (from sdata open in python)
+# del sdata['element1']
+# delet element from disk
+# sdata.delete_element_from_disk("element_name")
+
 # reading data with visium reader
 spe = visium_hd(path = '/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out/blocco1/outs', 
                 dataset_id='blocco1', 
