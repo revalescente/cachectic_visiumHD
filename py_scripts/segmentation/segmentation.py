@@ -48,56 +48,6 @@ min_intensity_ratio=0.1)
 
 #-------------------------------------------------------------------------------
 
-# Assign bins to nuclei
-
-# Example usage:
-# sdata['bin_shapes'] = assign_bins_to_nearest_nucleus(b1_stat3['intissue_002um'], b1_stat3['stardist_boundaries'])
-# 
-b1_stat3['bins_nuclei'] = assign_bins_to_nearest_nucleus(b1_stat3['intissue_002um'], b1_stat3['stardist_boundaries'])
-
-# b1_stat3['bins_nuclei2']['cell_id'] = b1_stat3['bins_nuclei2']['cell_id'].astype('category')
-
-# plot of the resulting bins - with and without zooming
-plt.figure(figsize=(50, 50))
-ax = plt.gca()
-b1_stat3.pl.render_images("blocco1_conv_image", cmap = "grey").pl.render_shapes(
-    "bins_nuclei2", outline_alpha=1, fill_alpha=1, color = "green", cmap = new_cmap
-).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei.png')
-
-
-
-plt.figure(figsize=(50, 50))
-ax = plt.gca()
-
-b1_stat3.query.bounding_box(
-    axes=["x", "y"],
-    min_coordinate=[6000, 4000],
-    max_coordinate=[8000, 5000],
-    target_coordinate_system="blocco1",
-).pl.render_images("blocco1_conv_image", cmap = "grey").pl.render_shapes(
-    "bins_nuclei2", outline_alpha=1, outline_width=0.5, fill_alpha=1, color = "green", cmap = new_cmap
-).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei2.png')
-
-
-
-# let's make a plot that has:
-# blocco1_conv_image, bins_nuclei colored by cell_id, nuclei boundaries not filled 
-
-plt.figure(figsize=(50, 50))
-ax = plt.gca()
-
-b1_stat3.query.bounding_box(
-    axes=["x", "y"],
-    min_coordinate=[6000, 4000],
-    max_coordinate=[8000, 5000],
-    target_coordinate_system="blocco1",
-).pl.render_images("blocco1_conv_image", cmap = "grey").pl.render_shapes(
-    "bins_nuclei2", outline_alpha=0.5, outline_width=0.5, fill_alpha=1, color = "green", cmap = new_cmap
-).pl.render_shapes(
-    "stardist_boundaries", outline_alpha=1, outline_width=1.5, fill_alpha=0
-).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei_both.png')
-
-
 # problem: 
 #' we have to filter nuclei based on dimensions, shapes, ecc
 #' we have to solve bins belonging to more then one nucleus:
@@ -172,7 +122,7 @@ for col in cols:
     plt.xlabel(col)
     plt.ylabel('Count')
     plt.tight_layout()
-    plt.savefig(f'{col}_histogram.png')  # Saves the plot as PNG
+    plt.savefig(f'figures/output_python/{col}_histogram.png')  # Saves the plot as PNG
     plt.close()  # Close the figure to avoid display overlap
 
 
@@ -191,5 +141,73 @@ cell_ids_to_keep = filtered['cell_id'].tolist()
 # Filter the GeoDataFrame by index
 prova = b1_stat3['stardist_boundaries'].loc[cell_ids_to_keep]
 
+b1_stat3['nuclei_boundaries'] = prova
 
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+b1_stat3.pl.render_images("raster_nuclei").pl.render_shapes("nuclei_boundaries", outline=True, outline_alpha=1, outline_width=1.5, fill_alpha=0
+).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_filtered_nuclei.png')
+
+
+# plotting the rasterized data
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+b1_stat3.query.bounding_box(
+    axes=["x", "y"],
+    min_coordinate=[6000, 4000],
+    max_coordinate=[8000, 5000],
+    target_coordinate_system="blocco1",
+).pl.render_images("raster_nuclei").pl.render_shapes("nuclei_boundaries", outline=True, outline_alpha=1, outline_width=1.5, fill_alpha=0
+).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_filtered_nuclei_zoom.png')
+
+# ------------------------------------------------------------------------------
+
+# Assign bins to nuclei
+
+# Example usage:
+# sdata['bin_shapes'] = assign_bins_to_nearest_nucleus(b1_stat3['intissue_002um'], b1_stat3['stardist_boundaries'])
+# 
+b1_stat3['bins_nuclei'] = assign_bins_to_nearest_nucleus(b1_stat3['intissue_002um'], b1_stat3['stardist_boundaries'])
+
+# b1_stat3['bins_nuclei2']['cell_id'] = b1_stat3['bins_nuclei2']['cell_id'].astype('category')
+
+# plot of the resulting bins - with and without zooming
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+b1_stat3.pl.render_images("blocco1_conv_image", cmap = "grey").pl.render_shapes(
+    "bins_nuclei2", outline_alpha=1, fill_alpha=1, color = "green", cmap = new_cmap
+).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei.png')
+
+
+
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+
+b1_stat3.query.bounding_box(
+    axes=["x", "y"],
+    min_coordinate=[6000, 4000],
+    max_coordinate=[8000, 5000],
+    target_coordinate_system="blocco1",
+).pl.render_images("blocco1_conv_image", cmap = "grey").pl.render_shapes(
+    "bins_nuclei2", outline_alpha=1, outline_width=0.5, fill_alpha=1, color = "green", cmap = new_cmap
+).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei2.png')
+
+
+
+# let's make a plot that has:
+# blocco1_conv_image, bins_nuclei colored by cell_id, nuclei boundaries not filled 
+
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+
+b1_stat3.query.bounding_box(
+    axes=["x", "y"],
+    min_coordinate=[6000, 4000],
+    max_coordinate=[8000, 5000],
+    target_coordinate_system="blocco1",
+).pl.render_images("blocco1_conv_image", cmap = "grey").pl.render_shapes(
+    "bins_nuclei2", outline_alpha=0.5, outline_width=0.5, fill_alpha=1, color = "green", cmap = new_cmap
+).pl.render_shapes(
+    "stardist_boundaries", outline_alpha=1, outline_width=1.5, fill_alpha=0
+).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei_both.png')
 
