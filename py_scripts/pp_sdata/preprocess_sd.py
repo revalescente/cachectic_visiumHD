@@ -45,11 +45,11 @@ spe = sd.read_zarr('spe_blocco1_mod001.zarr')
 print(spe)
 
 # read the intissue polygons
-intissue_poly = gpd.read_file('~/geojson_dir/tissue_hires_image_blocco1.geojson')
+intissue_poly = gpd.read_file('~/data/geojson_dir/tissue_hires_image_blocco1.geojson')
 intissue_poly = intissue_poly.set_crs(None, allow_override=True)
 
 # Apply scaling to all geometries in intissue_poly
-xfact =  3.78633328  # oppure il tuo valore inverso
+xfact =  3.78633328  
 yfact =  3.78633328
 
 intissue_scaled = intissue_poly.copy()
