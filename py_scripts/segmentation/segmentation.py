@@ -1,5 +1,6 @@
 import spatialdata as sd
 import spatialdata_plot
+from spatialdata import SpatialData
 from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
 from spatialdata.transformations import Identity
 import matplotlib.pyplot as plt
@@ -162,7 +163,7 @@ b1_stat3.query.bounding_box(
 
 # ------------------------------------------------------------------------------
 
-# Assign bins to nuclei
+# Assign bins to nuclei --------------------------------------------------------
 
 # Example usage:
 # sdata['bin_shapes'] = assign_bins_to_nearest_nucleus(b1_stat3['intissue_002um'], b1_stat3['stardist_boundaries'])
