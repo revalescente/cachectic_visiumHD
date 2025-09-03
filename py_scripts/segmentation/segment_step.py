@@ -19,6 +19,19 @@ from py_scripts.segmentation.segm_functions import (assign_bins_to_nearest_nucle
 
 # Read sdata with all the 'blocchi' (all in one or one sdata per blocco, not yet understood)
 
+# First try - concatenated data:
+spe = sd.read_zarr('/mnt/europa/valerio/data/cachetic_fulldataset.zarr')
+
+# set-up sopa metadata
+
+# {'spatialdata_attrs': {'instance_key': 'location_id', 
+                         'region': ['blocco4_intissue_002um', 
+                                     'blocco7_intissue_002um', 
+                                     'blocco9_intissue_002um'], 
+                         'region_key': 'region'}}
+
+
+
 # segmentation and post processing
 
 # output and clean
