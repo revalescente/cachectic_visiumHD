@@ -16,12 +16,12 @@ import sopa
 import re
 import json
 from shapely.affinity import scale
-from sopa.io.standardize import sanity_check, write_standardized, read_zarr_standardized
+from sopa.io.standardize import sanity_check, read_zarr_standardized
 import py_scripts.pp_sdata.pp_functions as pp
 
 # read data with io_reader
-# block_numbers = [1, 2, 3, 4, 5, 6, 7, 9]
-block_numbers = [4, 7, 9]
+block_numbers = [1, 2, 3, 4, 5, 6, 7, 9]
+# block_numbers = [4, 7, 9]
 spe_blocks = {}
 
 for i in block_numbers:
@@ -40,11 +40,11 @@ for i in block_numbers:
 
 # Write data as zarr stores, spe_blocks is a dictionary of datasets
 for block_name, spe in spe_blocks.items():
-    spe.write(f"/mnt/europa/valerio/data/{block_name}.zarr")
+    spe.write(f"/mnt/europa/valerio/data/zarr_store/general/{block_name}.zarr")
 
 # apply the sdata preprocess function to filter in tissue bins and save it back to a zarr file
 for num in block_numbers:
-    path = f'/mnt/europa/valerio/data/zarr_store/general/spe_blocco{num}.zarr'
+    path = f'/mnt/europa/valerio/data/zarr_store/general/blocco{num}.zarr'
     try:
         result = pp.sdata_pp(path)
         # (Optional) Save or use result here

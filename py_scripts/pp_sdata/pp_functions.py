@@ -7,7 +7,52 @@ from shapely.affinity import scale
 import spatialdata as sd
 from spatialdata.models import ShapesModel
 from spatialdata.transformations import Identity
-from sopa.io.standardize import sanity_check, write_standardized, read_zarr_standardized
+from sopa.io.standardize import sanity_check, read_zarr_standardized
+
+def preprocess_step(block_numbers = None):
+    """
+    Function to prepare data to segmentation: division by single samples
+    
+    """
+    # Which block to preprocess
+    if block_numbers is None:
+      block_numbers = [1,2,3,4,5,6,7,9]
+    else:
+      block_numbers
+
+    spe_blocks = {}
+    
+    # 1. reading data from source 
+    for i in block_numbers:
+        blocco_key = f"blocco{i}"
+        spe_blocks[block_name] = visium_hd(
+            path=f"/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out/blocco{i}/outs",
+            dataset_id=f"blocco{i}",
+            filtered_counts_file=False,
+            bin_size='002',
+            bins_as_squares=True,
+            annotate_table_by_labels=False,
+            fullres_image_file=f"/mnt/europa/valerio/HE_images/color_corrected/pp_blocco{i}_20x.tif",
+            load_all_images=False,
+            var_names_make_unique=True
+        )
+    # 1a. Writing data as zarr stores.
+    for blocco_key, spe in spe_blocks.items():
+      spe.write(f"/mnt/europa/valerio/data/{block_key}.zarr")
+    
+    # 2. Filtering of every blocks to remove useless bins and other little things
+    for num in block_numbers:
+    path = f'/mnt/europa/valerio/data/zarr_store/general/blocco{num}.zarr'
+    try:
+        result = pp.sdata_pp(path)
+        print(f"Processed blocco {num}")
+        # resaving as filtered data
+        result.write(f'/mnt/europa/valerio/data/zarr_store/filtered/filtered_blocco{num}.zarr')
+        print(f"Zarr Store created for blocco{num}")
+    except Exception as e:
+        print(f"Error processing blocco {num}: {e}")
+
+# ------------------------------------------------------------------------------
 
 def sdata_pp(path=None):
     # Infer blocco name from path
@@ -123,14 +168,19 @@ def divide_samples(spe_blocks, blocco_sample_bbox_dict, output_dir="/mnt/europa/
             subset_keys = [f"{blocco}_full_image", f"{blocco}_intissue_002um", f"{blocco}_intissue", "filtered"]
             sdata_subset = sdata_bbox.subset(subset_keys, filter_tables=False)
             
-            # --- INTEGRATION: filter bins and table ---
-            # 1. Filter 'blocco_intissue_002um' by exp_condition (column "name")
-            element_key = f"{blocco}_intissue_002um"
+            # --- INTEGRATION: filter bins, intissue and table ---
+            # 1. Filter 'blocco_intissue_002um' and 'blocco_intissue' by exp_condition (column "name") 
+            element_key_bins = f"{blocco}_intissue_002um"
             table_key = "filtered"
-            if element_key in sdata_subset:
-                sdata_subset[element_key] = sdata_subset[element_key][sdata_subset[element_key]['name'] == sample]
+            if element_key_bins in sdata_subset:
+                sdata_subset[element_key_bins] = sdata_subset[element_key_bins][sdata_subset[element_key_bins]['name'] == sample]
             else:
-                print(f"Element {element_key} not found in sdata_subset for {blocco}_{sample}")
+                print(f"Element {element_key_bins} not found in sdata_subset for {blocco}_{sample}")
+            element_key_intissue = f"{blocco}_intissue"
+            if element_key_intissue in sdata_subset:
+                sdata_subset[element_key_intissue] = sdata_subset[element_key_intissue][sdata_subset[element_key_intissue]['name'] == sample]
+            else:
+                print(f"Element {element_key_intissue} not found in sdata_subset for {blocco}_{sample}")
 
             # 2. Update 'filtered' table to match filtered element
             if hasattr(sd, "match_table_to_element"):  # sd must be your SpatialData module
@@ -146,16 +196,18 @@ def divide_samples(spe_blocks, blocco_sample_bbox_dict, output_dir="/mnt/europa/
                 sdata_subset,
                 cell_segmentation_key = f"{blocco}_full_image",
                 tissue_segmentation_key = f"{blocco}_full_image",
-                bins_table_key = "filtered",
-                boundaries_key = f"{blocco}_intissue"
+                bins_table_key = "filtered"
             )
+            
+            # remove intissue geometries that are not our sample of interest
+            sdata[f'{blocco}_intissue'] = sdata[f'{blocco}_intissue'][sdata[f'{blocco}_intissue'].name==f'{sample}']
             
             # Sanity check
             try:
                 sanity = sanity_check(sdata_subset)
                 if sanity is None:
                     out_path = f"{output_dir}{blocco}_{sample}.zarr"
-                    write_standardized(sdata_subset, out_path)
+                    sdata_subset.write(out_path)
                     print(f"Wrote {out_path}")
                 else:
                     print(f"Sanity check returned a value for {blocco}_{sample}; skipping write.")

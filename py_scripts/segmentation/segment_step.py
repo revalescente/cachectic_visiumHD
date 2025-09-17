@@ -1,7 +1,8 @@
 import spatialdata as sd
 import spatialdata_plot
+from spatialdata import SpatialData
 from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
-from spatialdata.transformations import Identity
+from spatialdata.transformations import (Identity, set_transformation)
 import matplotlib.pyplot as plt
 import squidpy as sq
 import numpy as np
@@ -11,27 +12,42 @@ import geopandas as gpd
 import pandas as pd
 import os
 import sopa
-from sopa.io.standardize import sanity_check, write_standardized, read_zarr_standardized
+import json
+from pathlib import Path
+from sopa.io.standardize import sanity_check, read_zarr_standardized
 from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 from skimage.measure import regionprops_table
-from py_scripts.segmentation.segm_functions import (assign_bins_to_nearest_nucleus, nuclei_filtering) 
+import py_scripts.segmentation.segm_functions as sf
+new_cmap = set_zero_in_cmap_to_transparent(cmap="viridis")
+# from importlib import reload
+# reload(sf)
+
+# read dict
+with open('/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json', 'r') as f:
+    blocco_sample_bbox_dict = json.load(f)
+
+for blocco, samples_dict in blocco_sample_bbox_dict.items():
+    # Now iterate through each sample in this blocco
+    for sample_key in samples_dict.keys():
+        # Construct the path for this specific sample
+        path_sdata = f"/mnt/europa/valerio/data/zarr_store/blocchi/{blocco}_{sample_key}.zarr"
+        sdata = read_zarr_standardized(path_sdata)
+        sdata = sf.segmentation_step(sdata)
+  
+# -------------------------------------------------------------------------------
+# Testing - to cancel all 
+# sdata = read_zarr_standardized("/mnt/europa/valerio/data/zarr_store/blocchi/blocco9_c26SMAD23.zarr")
 
 
-# Read sdata with all the 'blocchi' (all in one or one sdata per blocco, not yet understood)
 
-# First try - concatenated data:
-spe = sd.read_zarr('/mnt/europa/valerio/data/cachetic_fulldataset.zarr')
-
-# set-up sopa metadata
-
-# {'spatialdata_attrs': {'instance_key': 'location_id', 
-                         'region': ['blocco4_intissue_002um', 
-                                     'blocco7_intissue_002um', 
-                                     'blocco9_intissue_002um'], 
-                         'region_key': 'region'}}
+for blocco, samples_dict in blocco_sample_bbox_dict.items():
+    # Now iterate through each sample in this blocco
+    for sample_key in samples_dict.keys():
+        # Construct the path for this specific sample
+        path_sdata = f"/mnt/europa/valerio/data/zarr_store/blocchi/{blocco}_{sample_key}.zarr"
+        print(path_sdata)
 
 
 
-# segmentation and post processing
 
-# output and clean
+

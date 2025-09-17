@@ -1,0 +1,258 @@
+{
+  "blocco1": {
+    "c26STAT3": {
+      "min_coordinate": [
+        0,
+        6602
+      ],
+      "max_coordinate": [
+        10746,
+        10990
+      ]
+    },
+    "sham": {
+      "min_coordinate": [
+        0,
+        2639
+      ],
+      "max_coordinate": [
+        10746,
+        7026
+      ]
+    },
+    "c26foxO": {
+      "min_coordinate": [
+        0,
+        0
+      ],
+      "max_coordinate": [
+        10746,
+        4243
+      ]
+    }
+  },
+  "blocco2": {
+    "c26": {
+      "min_coordinate": [
+        0,
+        0
+      ],
+      "max_coordinate": [
+        8983,
+        3879
+      ]
+    },
+    "c26murf1": {
+      "min_coordinate": [
+        0,
+        3907
+      ],
+      "max_coordinate": [
+        8983,
+        6388
+      ]
+    },
+    "c26SMAD23": {
+      "min_coordinate": [
+        0,
+        7229
+      ],
+      "max_coordinate": [
+        8983,
+        10299
+      ]
+    }
+  },
+  "blocco3": {
+    "c26STAT3": {
+      "min_coordinate": [
+        0,
+        0
+      ],
+      "max_coordinate": [
+        7222,
+        4303
+      ]
+    },
+    "c26murf1": {
+      "min_coordinate": [
+        0,
+        3751
+      ],
+      "max_coordinate": [
+        7222,
+        6547
+      ]
+    },
+    "sham": {
+      "min_coordinate": [
+        0,
+        6805
+      ],
+      "max_coordinate": [
+        7222,
+        9270
+      ]
+    }
+  },
+  "blocco4": {
+    "c26SMAD23": {
+      "min_coordinate": [
+        0,
+        4499
+      ],
+      "max_coordinate": [
+        7222,
+        7567
+      ]
+    },
+    "c26foxO": {
+      "min_coordinate": [
+        0,
+        2401
+      ],
+      "max_coordinate": [
+        7222,
+        5026
+      ]
+    },
+    "c26": {
+      "min_coordinate": [
+        0,
+        71
+      ],
+      "max_coordinate": [
+        7222,
+        3234
+      ]
+    }
+  },
+  "blocco5": {
+    "c26SMAD23": {
+      "min_coordinate": [
+        0,
+        4974
+      ],
+      "max_coordinate": [
+        8981,
+        7599
+      ]
+    },
+    "c26STAT3": {
+      "min_coordinate": [
+        0,
+        1526
+      ],
+      "max_coordinate": [
+        8981,
+        5986
+      ]
+    },
+    "c26murf1": {
+      "min_coordinate": [
+        0,
+        0
+      ],
+      "max_coordinate": [
+        0,
+        0
+      ]
+    }
+  },
+  "blocco6": {
+    "c26": {
+      "min_coordinate": [
+        0,
+        6702
+      ],
+      "max_coordinate": [
+        7233,
+        9018
+      ]
+    },
+    "sham": {
+      "min_coordinate": [
+        0,
+        3637
+      ],
+      "max_coordinate": [
+        7233,
+        6616
+      ]
+    },
+    "c26foxO": {
+      "min_coordinate": [
+        0,
+        953
+      ],
+      "max_coordinate": [
+        7233,
+        4079
+      ]
+    }
+  },
+  "blocco7": {
+    "c26": {
+      "min_coordinate": [
+        0,
+        6391
+      ],
+      "max_coordinate": [
+        8994,
+        9876
+      ]
+    },
+    "c26STAT3": {
+      "min_coordinate": [
+        0,
+        4125
+      ],
+      "max_coordinate": [
+        8994,
+        6979
+      ]
+    },
+    "sham": {
+      "min_coordinate": [
+        0,
+        556
+      ],
+      "max_coordinate": [
+        8994,
+        4754
+      ]
+    }
+  },
+  "blocco9": {
+    "c26murf1": {
+      "min_coordinate": [
+        0,
+        6081
+      ],
+      "max_coordinate": [
+        8996,
+        9689
+      ]
+    },
+    "c26foxO": {
+      "min_coordinate": [
+        0,
+        4332
+      ],
+      "max_coordinate": [
+        8996,
+        7899
+      ]
+    },
+    "c26SMAD23": {
+      "min_coordinate": [
+        0,
+        976
+      ],
+      "max_coordinate": [
+        8996,
+        4752
+      ]
+    }
+  }
+}

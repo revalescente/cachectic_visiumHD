@@ -3,7 +3,6 @@ import spatialdata_plot
 from spatialdata import SpatialData
 from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
 from spatialdata.transformations import Identity
-import matplotlib.pyplot as plt
 import squidpy as sq
 import numpy as np
 import scanpy as sc
@@ -126,6 +125,19 @@ for col in cols:
     plt.savefig(f'figures/output_python/{col}_histogram.png')  # Saves the plot as PNG
     plt.close()  # Close the figure to avoid display overlap
 
+# with the new function:
+
+try:
+    # Assuming 'sdata' is your loaded SpatialData object
+    features_df = features_extraction(sdata, nuclei_element_name="blocco4_nuclei_boundaries")
+    print("Successfully extracted features:")
+    print(features_df.head())
+except ValueError as e:
+    print(f"Error: {e}")
+
+# testing equality of features extraction df
+props_df.equals(features_df)
+# correct
 
 # let's filter now
 
@@ -211,4 +223,5 @@ b1_stat3.query.bounding_box(
 ).pl.render_shapes(
     "stardist_boundaries", outline_alpha=1, outline_width=1.5, fill_alpha=0
 ).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/b1_stat3_bins_nuclei_both.png')
+
 
