@@ -515,7 +515,7 @@ def sopa_attrs_check(sdata):
   # 
   # return sdata
 
-def segmentation_step(sdata, expand_radius_ratio = None, no_overlap = True, filters = None, **kwargs):
+def segmentation_step(sdata):
   '''
   Function to apply segmentation to our data, one sample at a time
 
@@ -557,7 +557,7 @@ def segmentation_step(sdata, expand_radius_ratio = None, no_overlap = True, filt
   
 # Post processing function 
 
-def postprocess(sdata, expand_radius_ratio = None, no_overlap = True, filters = None, **kwargs):
+def postprocess_step(sdata, expand_radius_ratio = None, no_overlap = True, filters = None, **kwargs):
   '''
   Function to apply segmentation to our data, one sample at a time
 

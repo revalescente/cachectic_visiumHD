@@ -26,7 +26,9 @@ new_cmap = set_zero_in_cmap_to_transparent(cmap="viridis")
 with open('/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json', 'r') as f:
     blocco_sample_bbox_dict = json.load(f)
 
-for blocco, samples_dict in blocco_sample_bbox_dict.items():
+# subset_dict = {name: blocco_sample_bbox_dict[name] for name in ['blocco2', 'blocco3', 'blocco4', 'blocco5', 'blocco6', 'blocco7', 'blocco9'] if name in blocco_sample_bbox_dict}
+
+for blocco, samples_dict in subset_dict.items():
     # Now iterate through each sample in this blocco
     for sample_key in samples_dict.keys():
         # Construct the path for this specific sample
@@ -34,8 +36,6 @@ for blocco, samples_dict in blocco_sample_bbox_dict.items():
         sdata = read_zarr_standardized(path_sdata)
         sdata = sf.segmentation_step(sdata)
   
-# -------------------------------------------------------------------------------
-# Testing - to cancel all 
 # sdata = read_zarr_standardized("/mnt/europa/valerio/data/zarr_store/blocchi/blocco9_c26SMAD23.zarr")
 
 

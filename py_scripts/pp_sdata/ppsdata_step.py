@@ -19,20 +19,35 @@ from shapely.affinity import scale
 from sopa.io.standardize import sanity_check, read_zarr_standardized
 import py_scripts.pp_sdata.pp_functions as pp
 
-with open('/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json', 'r') as f:
-    blocco_sample_bbox_dict = json.load(f)
-
 # 1. read data and filtering, then saving it back in a new zarr
-spe_blocks = preprocess_step()
-
+# select the number of blocks to pp if you want
+pp.preprocess_step(block_numbers = None)
 
 # 2. dividing samples into individual zarr stores
 
 # let's use a dictionary to keep track of every sample for every blocco 
-with open('/mnt/europa/valerio/data/blocco_sample_bbox_dict.json', 'r') as f:
+with open('/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json', 'r') as f:
     blocco_sample_bbox_dict = json.load(f)
 
+# CONTROL BEFORE USE !!!!
+
 # if you wanna use it for a subset
-# subset_dict = {name: blocco_sample_bbox_dict[name] for name in ['blocco4', 'blocco7', 'blocco9'] if name in blocco_sample_bbox_dict}
+subset_dict = {name: blocco_sample_bbox_dict[name] for name in ['blocco7', 'blocco9'] if name in blocco_sample_bbox_dict}
 # for all dataset use: blocco_sample_bbox_dict
-pp.divide_samples(spe_blocks, blocco_sample_bbox_dict)
+pp.divide_samples(subset_dict)
+
+
+# ------------------------------------------------------------------------------
+
+# if you want to use all the samples at once
+
+# spe_blocks = {}
+# # change with blocco_sample_bbox_dict for full dataset 
+# for blocco, samples in subset_dict.items():
+#     for sample in samples:
+#         zarr_name = f"{blocco}_{sample}"
+#         zarr_path = f"/mnt/europa/valerio/data/zarr_store/blocchi/{zarr_name}.zarr"
+#         spe_blocks[zarr_name] = read_zarr_standardized(zarr_path)
+# 
+# 
+

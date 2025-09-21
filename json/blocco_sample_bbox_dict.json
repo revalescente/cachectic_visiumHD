@@ -70,7 +70,7 @@
         }
     },
     "blocco6": {
-        "c26": {
+        "c26foxO": {
             "min_coordinate": [0, 0],
             "max_coordinate": [16144, 6300]
         },
@@ -78,7 +78,7 @@
             "min_coordinate": [0, 5500],
             "max_coordinate": [16144, 12000]
         },
-        "c26foxO": {
+        "c26": {
             "min_coordinate": [0, 12000],
             "max_coordinate": [16144, 17412]
         }

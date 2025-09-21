@@ -5,13 +5,19 @@ import pandas as pd
 import geopandas as gpd
 from shapely.affinity import scale
 import spatialdata as sd
-from spatialdata.models import ShapesModel
 from spatialdata.transformations import Identity
 from sopa.io.standardize import sanity_check, read_zarr_standardized
+from spatialdata_io import visium_hd
+from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
+from spatialdata.transformations import Identity
+from spatialdata import SpatialData
+import json
 
 def preprocess_step(block_numbers = None):
     """
-    Function to prepare data to segmentation: division by single samples
+    Function to prepare data to segmentation: filtering useless things
+    
+    if you don't specify which blocks to process the function will process all of them
     
     """
     # Which block to preprocess
@@ -38,25 +44,26 @@ def preprocess_step(block_numbers = None):
         )
     # 1a. Writing data as zarr stores.
     for blocco_key, spe in spe_blocks.items():
-      spe.write(f"/mnt/europa/valerio/data/{block_key}.zarr")
+      spe.write(f"/mnt/europa/valerio/data/zarr_store/general/{block_key}.zarr")
     
     # 2. Filtering of every blocks to remove useless bins and other little things
     for num in block_numbers:
-    path = f'/mnt/europa/valerio/data/zarr_store/general/blocco{num}.zarr'
-    try:
-        result = pp.sdata_pp(path)
-        print(f"Processed blocco {num}")
-        # resaving as filtered data
-        result.write(f'/mnt/europa/valerio/data/zarr_store/filtered/filtered_blocco{num}.zarr')
-        print(f"Zarr Store created for blocco{num}")
-    except Exception as e:
-        print(f"Error processing blocco {num}: {e}")
+      path = f'/mnt/europa/valerio/data/zarr_store/general/blocco{num}.zarr'
+      try:
+          result = pp.sdata_pp(path)
+          print(f"Processed blocco {num}")
+          # resaving as filtered data
+          result.write(f'/mnt/europa/valerio/data/zarr_store/filtered/filtered_blocco{num}.zarr')
+          print(f"Zarr Store created for blocco{num}")
+      except Exception as e:
+          print(f"Error processing blocco {num}: {e}")
+      return print("Job done")
 
 # ------------------------------------------------------------------------------
 
 def sdata_pp(path=None):
     # Infer blocco name from path
-    # e.g. '/mnt/europa/valerio/data/spe_blocco1.zarr' -> 'blocco1'
+    # e.g. '/mnt/europa/valerio/data/zarr_store/general/blocco1.zarr' -> 'blocco1'
     blocco_match = re.search(r'(blocco\d+)', path)
     if not blocco_match:
         raise ValueError("Cannot infer blocco name from path.")
@@ -74,9 +81,7 @@ def sdata_pp(path=None):
     # Access the y scale value (index 1)
     scale_factor = spe.images[hires_key].transform[blocco_key].scale[1]
     # Infer geojson path: assumes file is named 'tissue_hires_image_{blocco_key}.geojson' in '~/data/geojson_dir/'
-    geojson_path = os.path.expanduser(
-        f"~/data/geojson_dir/tissue_hires_image_{blocco_key}.geojson"
-    )
+    geojson_path = f"/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_{blocco_key}.geojson"
     if not os.path.exists(geojson_path):
         raise FileNotFoundError(f"GeoJSON file not found: {geojson_path}")
     # Read intissue polygons
@@ -134,7 +139,10 @@ def sdata_pp(path=None):
 
 #-------------------------------------------------------------------------------
 
-def divide_samples(spe_blocks, blocco_sample_bbox_dict, output_dir="/mnt/europa/valerio/data/zarr_store/blocchi/"):
+def divide_samples(blocco_sample_bbox_dict, 
+                   output_dir = "/mnt/europa/valerio/data/zarr_store/blocchi/",
+                   input_dir  = "/mnt/europa/valerio/data/zarr_store/filtered"
+):
     '''
     The function need a dictionary organized like that:
       block1:
@@ -150,9 +158,9 @@ def divide_samples(spe_blocks, blocco_sample_bbox_dict, output_dir="/mnt/europa/
                       max_coordinate = [xmax, ymax]
     '''
     for blocco, samples in blocco_sample_bbox_dict.items():
-        spe = spe_blocks.get(blocco)
+        spe = read_zarr_standardized(f"{input_dir}/filtered_{blocco}.zarr")
         if spe is None:
-            print(f"Warning: {blocco} not found in spe_blocks; skipping.")
+            print(f"Warning: {blocco} not found in directory; skipping.")
             continue
         for sample, bbox in samples.items():
             min_coordinate = bbox['min_coordinate']
@@ -170,22 +178,26 @@ def divide_samples(spe_blocks, blocco_sample_bbox_dict, output_dir="/mnt/europa/
             
             # --- INTEGRATION: filter bins, intissue and table ---
             # 1. Filter 'blocco_intissue_002um' and 'blocco_intissue' by exp_condition (column "name") 
-            element_key_bins = f"{blocco}_intissue_002um"
             table_key = "filtered"
-            if element_key_bins in sdata_subset:
-                sdata_subset[element_key_bins] = sdata_subset[element_key_bins][sdata_subset[element_key_bins]['name'] == sample]
+            
+            # 1a. filtering bins not belonging to the right sample
+            bins_key = f"{blocco}_intissue_002um"
+            if bins_key in sdata_subset:
+                sdata_subset[bins_key] = sdata_subset[bins_key][sdata_subset[bins_key]['name'] == sample]
             else:
-                print(f"Element {element_key_bins} not found in sdata_subset for {blocco}_{sample}")
-            element_key_intissue = f"{blocco}_intissue"
-            if element_key_intissue in sdata_subset:
-                sdata_subset[element_key_intissue] = sdata_subset[element_key_intissue][sdata_subset[element_key_intissue]['name'] == sample]
+                print(f"Element {bins_key} not found in sdata_subset for {blocco}_{sample}")
+            
+            # 1b. filtering intissue poly for the same reason
+            intissue_key = f"{blocco}_intissue"
+            if intissue_key in sdata_subset:
+                sdata_subset[intissue_key] = sdata_subset[intissue_key][sdata_subset[intissue_key]['name'] == sample]
             else:
-                print(f"Element {element_key_intissue} not found in sdata_subset for {blocco}_{sample}")
+                print(f"Element {intissue_key} not found in sdata_subset for {blocco}_{sample}")
 
-            # 2. Update 'filtered' table to match filtered element
+            # 2. Update 'filtered' table to match filtered bins 
             if hasattr(sd, "match_table_to_element"):  # sd must be your SpatialData module
                 if table_key in sdata_subset:
-                    sdata_subset[table_key] = sd.match_table_to_element(sdata_subset, element_name=element_key, table_name=table_key)
+                    sdata_subset[table_key] = sd.match_table_to_element(sdata_subset, element_name=bins_key, table_name=table_key)
                 else:
                     print(f"Table {table_key} not found in sdata_subset for {blocco}_{sample}")
             else:
@@ -200,7 +212,7 @@ def divide_samples(spe_blocks, blocco_sample_bbox_dict, output_dir="/mnt/europa/
             )
             
             # remove intissue geometries that are not our sample of interest
-            sdata[f'{blocco}_intissue'] = sdata[f'{blocco}_intissue'][sdata[f'{blocco}_intissue'].name==f'{sample}']
+            sdata_subset[intissue_key] = sdata_subset[intissue_key][sdata_subset[intissue_key]['name'] == sample]
             
             # Sanity check
             try:
