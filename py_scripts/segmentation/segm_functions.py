@@ -559,7 +559,7 @@ def segmentation_step(sdata):
 
 def postprocess_step(sdata, expand_radius_ratio = None, no_overlap = True, filters = None, **kwargs):
   '''
-  Function to apply segmentation to our data, one sample at a time
+  Function to apply post processing to our data, one sample at a time
 
   attrs structure:
     sdata.attrs:

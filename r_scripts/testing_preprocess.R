@@ -17,7 +17,7 @@ library(SingleCellExperiment)
 
 
 # Read data 
-(sdata2 <- readSpatialData("/mnt/europa/valerio/data/zarr_store/blocchi/blocco4_c26.zarr", anndataR=TRUE))
+(sdata2 <- readSpatialData("/mnt/europa/valerio/data/zarr_store/blocchi/blocco3_sham.zarr", anndataR=TRUE))
 (sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/general/b1_stat3.zarr", anndataR=TRUE))
 
 shapes(sdata2)
@@ -38,9 +38,10 @@ fim <- image(sdata2, "blocco4_full_image")
 vapply(fim@data, dim, numeric(3))
 
 
-
-
-
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("anndataR")
 
 
 
