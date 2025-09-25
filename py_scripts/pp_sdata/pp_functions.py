@@ -170,7 +170,7 @@ def divide_samples(blocco_sample_bbox_dict,
                 axes=["x", "y"],
                 min_coordinate=min_coordinate,
                 max_coordinate=max_coordinate,
-                target_coordinate_system=blocco,
+                target_coordinate_system=blocco
             )
             # Subset elements
             subset_keys = [f"{blocco}_full_image", f"{blocco}_intissue_002um", f"{blocco}_intissue", "filtered"]
@@ -206,13 +206,10 @@ def divide_samples(blocco_sample_bbox_dict,
             # sopa metadata 
             sopa.utils.set_sopa_attrs(
                 sdata_subset,
-                cell_segmentation_key = f"{blocco}_full_image",
-                tissue_segmentation_key = f"{blocco}_full_image",
-                bins_table_key = "filtered"
+                cell_segmentation_image = f"{blocco}_full_image",
+                tissue_segmentation_image = f"{blocco}_full_image",
+                bins_table = "filtered"
             )
-            
-            # remove intissue geometries that are not our sample of interest
-            sdata_subset[intissue_key] = sdata_subset[intissue_key][sdata_subset[intissue_key]['name'] == sample]
             
             # Sanity check
             try:

@@ -48,83 +48,34 @@ def bin_to_cell_id_vector(sdata, table_key: str):
 
 def morphological_filtering(sdata, filters):
 
-  filename = sdata.path.stem  # 'blocco4_c26'
-
-  # Use regex to extract blocco_key and samples_key
+  filename = sdata.path.stem
   match = re.match(r'(blocco\d+)_(\w+)', filename)
-  if match:
-      blocco_key, samples_key = match.group(1), match.group(2)
-      
-  else:
-      raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata_path}")
-
-  # to add: way to extract blocco_key and then 
-  try:
-      # Assuming 'sdata' is your loaded SpatialData object
-      features_df = features_extraction(sdata, nuclei_element_name = f"{blocco_key}_nuclei_boundaries")
-      print("Successfully extracted features:")
-  except ValueError as e:
-      print(f"Error: {e}")
+  if not match:
+      # Corrected to use sdata.path which is available
+      raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata.path}")
   
-  # adding the morphological characteristics in the colData of our sdata object
+  blocco_key, samples_key = match.group(1), match.group(2)
+  
+  # --- CHANGE IS HERE ---
+  # The try...except block has been removed.
+  # If features_extraction fails, the error will now stop the script.
+  features_df = features_extraction(sdata, nuclei_element_name=f"{blocco_key}_nuclei_boundaries")
+  print("Successfully extracted features.\n")
+  
+  # This code will only run if features_extraction succeeds
   cols = ['eccentricity', 'solidity', 'extent', 'major_axis_length', 'minor_axis_length']
   sdata['nuclei_counts_nop'].obs = sdata['nuclei_counts_nop'].obs.join(features_df[cols], how='left')
 
   filtered = nuclei_filtering(features_df, filters)
 
-  # Get the cell_ids to keep
   cell_ids_to_keep = filtered.index.tolist()
   
-  # Filter the GeoDataFrame by index
-  sdata[f'{blocco_key}_filtered_nuclei'] = sdata[f'{blocco_key}_nuclei_boundaries'].loc[cell_ids_to_keep]
+  nuclei_filter_key = f'{blocco_key}_filtered_nuclei'
+  sdata[nuclei_filter_key] = sdata[f'{blocco_key}_nuclei_boundaries'].loc[cell_ids_to_keep]
+  
+  sdata.write_element(nuclei_filter_key)
   
   return sdata
-
-# versione copilot da verificare, la mia funziona comunque
-# def morphological_filtering(sdata, filters):
-#     """
-#     Extracts blocco_key and sample_key from sdata path, computes morphological features,
-#     filters nuclei based on user criteria, and updates sdata accordingly.
-# 
-#     Args:
-#         sdata (SpatialData): Your SpatialData object.
-#         filters (dict): Filtering criteria for nuclei features.
-# 
-#     Returns:
-#         SpatialData: Updated sdata object.
-#     """
-# 
-#     # --- 1. Extract keys from path ---
-#     filename = sdata.path.stem  # e.g. 'blocco4_c26'
-#     match = re.match(r'(blocco\d+)_(\w+)', filename)
-#     if not match:
-#         raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata.path}")
-#     blocco_key, samples_key = match.group(1), match.group(2)
-# 
-#     # --- 2. Feature extraction ---
-#     try:
-#         features_df = features_extraction(sdata, nuclei_element_name=f"{blocco_key}_nuclei_boundaries")
-#         print("Successfully extracted features.")
-#     except ValueError as e:
-#         print(f"Error in features_extraction: {e}")
-#         return sdata
-# 
-#     # --- 3. Filter nuclei features ---
-#     filtered = nuclei_filtering(features_df, filters)
-# 
-#     # --- 4. Update filtered nuclei in sdata ---
-#     cell_ids_to_keep = filtered.index.tolist()
-#     # Make sure the index is compatible!
-#     nuclei_gdf = sdata[f"{blocco_key}_nuclei_boundaries"]
-#     sdata[f"{blocco_key}_filtered_nuclei"] = nuclei_gdf.loc[cell_ids_to_keep]
-# 
-#     # Optionally: update AnnData obs if needed (no redundant join)
-#     # If you want to update .obs columns with new features:
-#     # for col in ['eccentricity', 'solidity', 'extent', 'major_axis_length', 'minor_axis_length']:
-#     #     sdata['nuclei_counts_nop'].obs[col] = features_df[col]
-# 
-#     return sdata
-
 
 # ------------------------------------------------------------------------------
 
@@ -164,62 +115,7 @@ def nuclei_filtering(props_df, filters):
 
 # ------------------------------------------------------------------------------
 
-# la mia brutta copia
-# def features_extraction(sdata, nuclei_element_name = "nuclei_boundaries"):
-#   '''
-#   Function to extract some features from the nuclei shapes
-#   '''
-#   # check: stop if doesn't check: nuclei_element_name must be in the sdata object
-#   # Check if attrs are correct:
-#   if sopa_attrs_check(sdata) is True:
-#     continue
-#   else print("Check sopa's attributes")  # here should stop
-# 
-#   # blocks key to call other elements
-#   blocco_key = re.search(r'(blocco\d+)', sdata.attrs['boundaries_shapes']).group(1)
-# 
-#   # Let's rasterize the nuclei polygons (trasform in a label image)
-#   # extract the extent to rasterize
-#   element_extent = sd.get_extent(sdata[nuclei_element_name], coordinate_system=blocco_key, exact=True)
-#   # exemple {'x': (1994.433953335766, 15784.49036300504), 'y': (299.5143364244573, 7999.5)}
-# 
-#   # rasterize shapes
-#   sdata[f"{blocco_key}_raster_nuclei"] = sd.rasterize(
-#     sdata[nuclei_element_name],
-#     ["x", "y"],
-#     min_coordinate=[element_extent['x'][0],element_extent['y'][0]],
-#     max_coordinate=[element_extent['x'][1],element_extent['y'][1]],
-#     target_coordinate_system=blocco_key,
-#     target_unit_to_pixels=1,
-#   )
-#   # transform into integer values
-# 
-#   # If your array is an xarray with shape (1, H, W), get the first channel
-#   label_mask = sdata[f'{blocco_key}_raster_nuclei'].values
-# 
-#   # If shape is (1, H, W), squeeze to (H, W)
-#   if label_mask.ndim == 3 and label_mask.shape[0] == 1:
-#       label_mask = label_mask[0]
-#   else label_mask
-# 
-#   # Cast to integer type
-#   label_mask = label_mask.astype(np.int32)
-# 
-#   # add features of the rasterized nuclei boundaries
-# 
-#   # 2. Compute regionprops
-#   props = regionprops_table(label_mask, properties=[
-#       'label', 'area', 'eccentricity', 'solidity', 'extent', 'major_axis_length', 'minor_axis_length'])
-#   props_df = pd.DataFrame(props)
-# 
-#   # Get mapping dictionary from xarray attributes
-#   label_to_id = b1_stat3['raster_nuclei'].attrs['label_index_to_category']
-# 
-#   # Map: create a new column with the nucleus ID
-#   props_df['cell_id'] = props_df['label'].map(label_to_id)
-
-# gemini 2.5 pro adjusted
-def features_extraction(sdata, nuclei_element_name="nuclei_boundaries"):
+def features_extraction(sdata, nuclei_element_name = "nuclei_boundaries"):
     """
     Extracts morphological features from nuclei shapes in a SpatialData object.
 
@@ -245,12 +141,12 @@ def features_extraction(sdata, nuclei_element_name="nuclei_boundaries"):
     # 2. --- Extract Coordinate System Key ---
     try:
         # Assumes a pattern like 'blocco1' is the coordinate system name
-        blocco_key_match = re.search(r'(blocco\d+)', sdata.attrs['boundaries_shapes'])
+        blocco_key_match = re.search(r'(blocco\d+)', sdata.attrs['cell_segmentation_image'])
         if not blocco_key_match:
-            raise ValueError("Could not find a 'bloccoN' key in sdata.attrs['boundaries_shapes'].")
+            raise ValueError("Could not find a 'bloccoN' key in sdata.attrs['cell_segmentation_image'].")
         blocco_key = blocco_key_match.group(1)
     except (KeyError, AttributeError):
-        raise ValueError("sdata.attrs['boundaries_shapes'] is missing or invalid.")
+        raise ValueError(f"sdata.attrs['cell_segmentation_image'] is missing or invalid: {sdata.attrs}")
     # 3. --- Rasterize Nuclei Polygons ---
     raster_key = f"{blocco_key}_raster_nuclei"
     element_extent = sd.get_extent(sdata[nuclei_element_name], coordinate_system=blocco_key, exact=True)
@@ -393,7 +289,7 @@ def sopa_attrs_check(sdata):
         
     Notes
     -----
-    This function expects 'bins_table' to be 'filtered' and 'cell_segmentation_image'
+    This function expects 'bins_table_key' to be 'filtered' and 'cell_segmentation_key'
     to follow the pattern '{blocco}_full_image'.
     """
     # Extract required attributes
@@ -584,38 +480,50 @@ def postprocess_step(sdata, expand_radius_ratio = None, no_overlap = True, filte
   
   # 3. Post processing
   
-  # 3a. nuclei aggregation with no overlap of bins and nuclei after expansion
-  sopa.aggregate(sdata, key_added = 'nuclei_counts_nop', bins_key= "filtered", 
-  shapes_key = f"{blocco_key}_nuclei_boundaries", expand_radius_ratio=expand_radius_ratio, min_transcripts=1, 
+  # 3a. nuclei aggregation with no overlap of bins in nuclei, after expansion
+  sopa.aggregate(sdata, key_added = 'nuclei_counts_nop', bins_key= "filtered",
+  shapes_key = f"{blocco_key}_nuclei_boundaries", expand_radius_ratio=expand_radius_ratio, min_transcripts=1,
   min_intensity_ratio=0.1, no_overlap = no_overlap)
-  
-  
+
   # 3b. Nuclei filtering based on morphological features
   # if filters not defined, use this one
   if filters is None:
+    
     filters = {'area': (50, 4000),  # filter out the bigger and smaller nuclei
     'eccentricity': (None, 0.95), # filter the most parabolic nuclei (one edge almost straight)
     'solidity': (0.7, None), # filter the most concave
     'extent': (0.2, None)} # filter the most irregular nuclei (mix between parabolic and concave)
+    
     sdata = morphological_filtering(sdata, filters)
   else:
     sdata = morphological_filtering(sdata, filters)
   
+  filtered_nuclei_key = f"{blocco_key}_filtered_nuclei"
+  if filtered_nuclei_key not in sdata.shapes:
+      print(f"Error: The element '{filtered_nuclei_key}' was not found in sdata.shapes after morphological filtering.")
+      print(f"Stopping post-processing for sample '{filename}'. Please check the filtering step.")
+      return sdata # Stop the function and return the sdata object as-is
+  
   # 3c. Annotating the table with the spatial element (nuclei polys)
-  sdata["nuclei_counts_nop"].obs["region"] = f"{blocco_key}_filtered_nuclei"
-  sdata.set_table_annotates_spatialelement("nuclei_counts_nop", region = f"{blocco_key}_filtered_nuclei", region_key="region", instance_key="cell_id")
+  sdata["nuclei_counts_nop"].obs["region"] = filtered_nuclei_key
+  sdata.set_table_annotates_spatialelement("nuclei_counts_nop", region = filtered_nuclei_key, region_key="region", instance_key="cell_id")
   
   # 3d. matching table with the filtered nuclei
-  sdata['nuclei_counts_nop'] = sd.match_table_to_element(sdata, element_name = f"{blocco_key}_filtered_nuclei", table_name='nuclei_counts_nop')
+  sdata['nuclei_counts_nop'] = sd.match_table_to_element(sdata, element_name = filtered_nuclei_key, table_name='nuclei_counts_nop')
   
   # 3e. Filtering bins_gdf 
   sdata[f'{blocco_key}_intissue_002um']['cell_id'] = bin_to_cell_id_vector(sdata, table_key = 'nuclei_counts_nop')
-  sdata[f'{blocco_key}_intissue_filter'] = sdata[f'{blocco_key}_intissue_002um'][sdata[f'{blocco_key}_intissue_002um']['cell_id'].notna()]
+  sdata[f'{blocco_key}_filtered_bins'] = sdata[f'{blocco_key}_intissue_002um'][sdata[f'{blocco_key}_intissue_002um']['cell_id'].notna()]
+  filtered_bins = f'{blocco_key}_filtered_bins'
+  sdata.write_element(filtered_bins)
   
   # If you want to annotate the table of the genes vs nuclei with the filtered bins 
   # sdata['nuclei_counts_nop'].obs['region'] = 'blocco4_intissue_filter'
-  # sdata.set_table_annotates_spatialelement('nuclei_counts_nop', region = 'blocco4_intissue_filter', region_key=None, instance_key = 'cell_id')
-
+  # sdata.set_table_annotates_spatialelement('nuclei_counts_nop', region = 'blocco4_filtered_bins', region_key=None, instance_key = 'cell_id')
+  
+  # let's remove a residual of the segmentation process that isn't usefull anymore
+  sdata.delete_element_from_disk('image_patches')
+  
   return sdata
 
 

@@ -29,8 +29,6 @@ pp.preprocess_step(block_numbers = None)
 with open('/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json', 'r') as f:
     blocco_sample_bbox_dict = json.load(f)
 
-# CONTROL BEFORE USE !!!!
-
 # if you wanna use it for a subset
 subset_dict = {name: blocco_sample_bbox_dict[name] for name in ['blocco7', 'blocco9'] if name in blocco_sample_bbox_dict}
 # for all dataset use: blocco_sample_bbox_dict

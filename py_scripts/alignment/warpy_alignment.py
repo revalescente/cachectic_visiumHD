@@ -6,7 +6,9 @@ import numpy as np
 from jpype.types import JString, JArray
 from skimage import io
 import matplotlib.pyplot as plt
-import coord_trans.py
+import py_scripts.alignment.align_funs as af
+# from importlib import reload
+# reload(sf)
 
 
 def get_java_dependencies():
@@ -27,11 +29,14 @@ RealTransformHelper = jimport('net.imglib2.realtransform.RealTransformHelper')
 # Retrieve the transformation object
 transform = RealTransformHelper.fromJson(ij.context(), JString(transform_file_path))
 # Transforming the fluo image by using RealTransformHelper ----------
+
 # Read a TIFF image
 img = io.imread("/mnt/europa/valerio/Fluo_images/samples/blocco1_c26foxO.tif")
 # img2 = io.imread("/mnt/europa/valerio/HE_images/color_corrected/pp_blocco1_20x.tif")
+
 # Transform the fluo image.
 RealTransformHelper.apply(ij.py.to_java(img), transform)
+
 # save it
 io.imsave("/mnt/europa/valerio/Fluo_images/warped/blocco1_c26foxO.tif", img)
 
@@ -50,3 +55,31 @@ ax.imshow(img)  # Use alpha to blend images
 ax.axis('on')
 plt.savefig('/mnt/europa/valerio/figures/align_1.png', bbox_inches='tight', pad_inches=0)
 plt.close()
+
+# ------------------------------------------------------------------------------
+# With functions
+
+img = io.imread("/mnt/europa/valerio/Fluo_images/samples/blocco1_c26foxO.tif")
+
+modded = af.transform_to_physical_coordinates(img, pixel_size_x = 0.315, pixel_size_y = 0.315)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

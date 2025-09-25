@@ -2,113 +2,137 @@
     "blocco1": {
         "c26STAT3": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [16166, 8000]
+            "max_coordinate": [16166, 8000],
+            "sample_key": "blocco1_c26STAT3"
         },
         "sham": {
-            "min_coordinate": [0, 8000],
-            "max_coordinate": [16166, 15000]
+            "min_coordinate": [0,8000],
+            "max_coordinate": [16166, 15000],
+            "sample_key": "blocco1_sham"
         },
         "c26foxO": {
             "min_coordinate": [0, 15000],
-            "max_coordinate": [16166, 22718]
+            "max_coordinate": [16166, 22718],
+            "sample_key": "blocco1_c26foxO"
         }
     },
     "blocco2": {
         "c26": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [21414, 7200]
+            "max_coordinate": [21414, 7200],
+            "sample_key": "blocco2_c26"
         },
         "c26murf1": {
             "min_coordinate": [0, 6500],
-            "max_coordinate": [21414, 12000]
+            "max_coordinate": [21414, 12000],
+            "sample_key": "blocco2_c26murf1"
         },
         "c26SMAD23": {
             "min_coordinate": [0, 11500],
-            "max_coordinate": [21414, 20069]
+            "max_coordinate": [21414, 20069],
+            "sample_key": "blocco2_c26SMAD23"
         }
     },
     "blocco3": {
         "c26STAT3": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [14357, 7500]
+            "max_coordinate": [14357, 7500],
+            "sample_key": "blocco3_c26STAT3"
         },
         "c26murf1": {
             "min_coordinate": [0, 7200],
-            "max_coordinate": [14357, 12000]
+            "max_coordinate": [14357, 12000],
+            "sample_key": "blocco3_c26murf1"
         },
         "sham": {
             "min_coordinate": [0, 12500],
-            "max_coordinate": [14357, 18739]
+            "max_coordinate": [14357, 18739],
+            "sample_key": "blocco3_sham"
         }
     },
     "blocco4": {
         "c26SMAD23": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [14366, 6000]
+            "max_coordinate": [14366, 6000],
+            "sample_key": "blocco4_c26SMAD23"
         },
         "c26foxO": {
             "min_coordinate": [0, 5000],
-            "max_coordinate": [14366, 11000]
+            "max_coordinate": [14366, 11000],
+            "sample_key": "blocco4_c26foxO"
         },
         "c26": {
             "min_coordinate": [0, 9000],
-            "max_coordinate": [14366, 16063]
+            "max_coordinate": [14366, 16063],
+            "sample_key": "blocco4_c26"
         }
     },
     "blocco5": {
         "c26SMAD23": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [16138, 5000]
+            "max_coordinate": [16138, 5000],
+            "sample_key": "blocco5_c26SMAD23"
         },
         "c26STAT3": {
             "min_coordinate": [0, 4500],
-            "max_coordinate": [16138, 10500]
+            "max_coordinate": [16138, 10500],
+            "sample_key": "blocco5_c26STAT3"
         },
         "c26murf1": {
             "min_coordinate": [0, 9500],
-            "max_coordinate": [16138, 14763]
+            "max_coordinate": [16138, 14763],
+            "sample_key": "blocco5_c26murf1"
         }
     },
     "blocco6": {
         "c26foxO": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [16144, 6300]
+            "max_coordinate": [16144, 6300],
+            "sample_key": "blocco6_c26foxO"
         },
         "sham": {
             "min_coordinate": [0, 5500],
-            "max_coordinate": [16144, 12000]
+            "max_coordinate": [16144, 12000],
+            "sample_key": "blocco6_sham"
         },
         "c26": {
             "min_coordinate": [0, 12000],
-            "max_coordinate": [16144, 17412]
+            "max_coordinate": [16144, 17412],
+            "sample_key": "blocco6_c26"
         }
     },
     "blocco7": {
         "c26": {
             "min_coordinate": [0, 0],
-            "max_coordinate": [16147, 6800]
+            "max_coordinate": [16147, 6800],
+            "sample_key": "blocco7_c26"
         },
         "c26STAT3": {
             "min_coordinate": [0, 5900],
-            "max_coordinate": [16147, 11300]
+            "max_coordinate": [16147, 11300],
+            "sample_key": "blocco7_c26STAT3"
         },
         "sham": {
-            "min_coordinate": [0, 11000],
-            "max_coordinate": [16147, 18751]
+            "min_coordinate": [0,11000],
+            "max_coordinate": [16147,18751],
+            "sample_key": "blocco7_sham"
         }
     },
     "blocco9": {
         "c26murf1": {
-            "min_coordinate": [0, 0],
-            "max_coordinate": [14370, 6000]
+            "min_coordinate": [0,0],
+            "max_coordinate": [14370,6000],
+            "sample_key": "blocco9_c26murf1"
         },
         "c26foxO": {
             "min_coordinate": [0, 4500],
-            "max_coordinate": [14370, 10000]
+            "max_coordinate": [14370, 10000],
+            "sample_key": "blocco9_c26foxO"
         },
         "c26SMAD23": {
             "min_coordinate": [0, 10200],
-            "max_coordinate": [14370, 18725]
+            "max_coordinate": [14370, 18725],
+            "sample_key": "blocco9_c26SMAD23"
         }
     }
 }
