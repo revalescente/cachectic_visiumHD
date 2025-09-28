@@ -1,0 +1,419 @@
+---
+title: "Analisi esplorative 4 campioni"
+author: "Valerio Reffo"
+date: "2025-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(Matrix)
+library(jsonlite)
+library(arrow)
+library(png)
+library(SummarizedExperiment)
+library(S4Vectors)
+library(ggspavis)
+library(SpatialExperiment)
+library(patchwork)
+library(VisiumIO)
+library(edgeR)
+library(scater)
+library(scuttle)
+library(scran)
+library(dplyr)
+library(SingleCellExperiment)
+library(tidyverse)
+library(SpotSweeper)
+library(ggplot2)
+library(patchwork)
+library(ggnewscale)
+
+# libreria per leggere i dati e plottarli
+library(SpatialData)
+library(SpatialData.plot)
+```
+
+# Analisi Esplorativa dei dati di 4 campioni 
+
+La matrice dei dati consiste di `r dim(spe)[1]` geni e `r dim(spe)[2]` nuclei, divisi tra 4 campioni
+
+```{r message=FALSE, warning=FALSE}
+(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
+```
+
+Estraiamo l'anndata aka il SingleCellExperiment
+
+```{r}
+(spe <- tables(sdata)$nuclei_counts_nop)
+```
+
+
+```{r}
+colData(spe)$ncounts <- colSums(assay(spe))
+colData(spe)$ngenes <- Matrix::colSums(assay(spe) > 0)
+counts(spe) <- assay(spe)
+assay(spe, "X") = NULL
+```
+
+```{r}
+spe$cell_id = colnames(spe)
+colnames(spe) = seq(1, dim(spe)[2], by = 1)
+```
+
+
+## Grafico numero di geni per numero di conteggi, per campione(?)
+
+```{r}
+samples = unique(spe$sample_id)
+# for el in samples{
+#   colData(spe)[spe$sample_id == "blocco1_c26foxO", ] |> 
+#     ggplot(aes(x = ngenes, y = ncounts)) +
+#     geom_point()
+# }
+
+lapply(samples, function(sample){
+    plot <- colData(spe)[spe$sample_id == sample, ] |> 
+    ggplot(aes(x = ngenes, y = ncounts)) + 
+      geom_point(alpha = 0.2) + 
+      labs(title = paste(sample))
+    plot
+})
+
+```
+
+## Filtraggio sui conteggi e sui numeri di geni
+
+Aspetto per capire cosa è meglio fare, al 5% ho sia 6 geni che 6 conteggi
+```{r}
+#spe <- spe[, colData(spe)$ncounts >= quantile(colData(spe)$ncounts, 0.05) &
+#                     colData(spe)$ngenes >= quantile(colData(spe)$ngenes, 0.05)]
+```
+
+## Controllo geni ribosomiali
+
+```{r}
+table(grepl("^Mt-", rownames(spe)))
+table(grepl("^Rpl-", rownames(spe)))
+table(grepl("^Rps-", rownames(spe)))
+```
+
+Non ci sono Geni ribosomiali
+
+# Analisi Pseudo-Bulk
+
+```{r}
+pb <- aggregateAcrossCells(spe, use.assay.type = "counts", ids=spe$sample_id)
+pb
+colData(pb)
+```
+
+## Normalizzazione 
+
+```{r}
+raw_counts <- assay(pb, "counts") 
+dge <- DGEList(counts = raw_counts)
+dge <- calcNormFactors(dge, method = "TMM")
+#log_cpm <- cpm(dge, log = TRUE)
+logcounts(pb) <- cpm(dge, log = TRUE)
+```
+
+
+### PCA
+
+```{r}
+pb <- runPCA(pb, BSPARAM = BiocSingular::ExactParam(), ncomponents=8)
+plotPCA(pb, color_by = "sampletype", point_size=8)
+plotPCA(pb, color_by = "blocco", point_size=8)
+```
+
+## tSNE
+
+
+```{r}
+pb <- runTSNE(pb, dimred = "PCA", perplexity = 2)
+plotTSNE(pb, color_by = "sampletype", point_size = 8)
+plotTSNE(pb, color_by = "blocco", point_size = 8)
+```
+
+## UMAP
+
+```{r}
+pb <- runUMAP(pb, dimred = "PCA", n_neighbors = 3)
+plotUMAP(pb, color_by = "sampletype", point_size = 8)
+plotUMAP(pb, color_by = "blocco", point_size = 8)
+```
+
+## High Variable Genes
+
+Guardiamo la decomposizione della varianza dei geni, poi mantenendo solo i 5000
+geni più variabili guardiamo PCA, T-SNE e UMAP per avere un'indicazione di come
+si dispongono i campioni in uno spazio ridotto e osservare eventuali aggregazioni
+basate sul tipo di campione e sul blocco.
+
+```{r, message=FALSE, warning=FALSE}
+dec.pb <- modelGeneVar(pb, assay.type = "logcounts")
+
+#Decomposizione varianza
+summary_table <- tibble::tibble(
+  Descrizione = c(
+    "Totale geni",
+    "NA (non stimata)",
+    "Var. bio <= 0",
+    "Var. bio > 0",
+    "FDR < 0.05 (TRUE)",
+    "FDR < 0.01 (TRUE)"
+  ),
+  Valore = c(
+    nrow(dec.pb),
+    sum(is.na(dec.pb$bio)),
+    sum(!is.na(dec.pb$bio) & dec.pb$bio <= 0),
+    sum(!is.na(dec.pb$bio) & dec.pb$bio > 0),
+    sum(dec.pb$FDR < 0.05, na.rm = TRUE),
+    sum(dec.pb$FDR < 0.01, na.rm = TRUE)
+  )
+)
+
+print(summary_table)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+#Prendiamo 5000 geni (circa il 15%)
+top5000_genes <- getTopHVGs(dec.pb, n = 5000)
+pb_vg <- pb[top5000_genes, ]
+
+#PCA SUI GENI + VARIABILI
+pb_vg <- runPCA(pb_vg, BSPARAM = BiocSingular::ExactParam(), ncomponents=2)
+plotPCA(pb_vg, color_by = "sampletype", point_size=6)
+plotPCA(pb_vg, color_by = "blocco", point_size=6)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+#Varianza spiegata CP
+var_explained <- attr(reducedDim(pb), "varExplained")
+percent_var <- round(100 * var_explained, 1)
+
+#SCREE PLOT COMPONENTI PRINCIPALI
+elbow_df <- data.frame(PC = paste0("PC", 1:length(var_explained)),
+                       VarianceExplained = var_explained)
+
+ggplot(elbow_df[1:12, ], aes(x = seq_along(VarianceExplained), y = VarianceExplained)) +
+  geom_point() + geom_line() + theme_minimal() +
+  labs(title = "Elbow Plot", x = "Principal Component", y = "Proportion of Variance Explained")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+#UMAP CON GENI + VARIABILI
+pb_vg <- runUMAP(pb_vg, dimred = "PCA", n_neighbors = 3)
+plotUMAP(pb_vg, color_by = "sampletype", point_size = 8)
+
+#TSNE CON GENI + VARIABILI
+pb_vg <- runTSNE(pb_vg, dimred = "PCA", perplexity = 2)
+plotTSNE(pb_vg, color_by = "sampletype", point_size = 8)
+
+```
+
+## Boxplot dei logcounts
+
+```{r}
+as.data.frame(logcounts(pb)) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample_id",
+    values_to = "expression"
+  ) |> 
+  ggplot(aes(x = sample_id, y = expression)) +
+    geom_boxplot(outlier.shape = NA) +  # outline=FALSE
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # las=2
+    labs(x = "Sample", y = "Log expression")
+```
+
+
+```{r}
+#counts
+df_long <- as.data.frame(counts(pb)) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "sample",
+    values_to = "expression"
+  )
+# 
+# ggplot(df_long, aes(x = sample, y = expression)) +
+#   geom_boxplot(outlier.shape = NA) +  # outline=FALSE
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +  # las=2
+#   labs(x = "Sample", y = "Log expression")
+
+#PER TIPO DI CAMPIONE
+df_long$sampletype <- colData(pb)$sampletype[match(df_long$sample, colnames(pb))]
+
+df_long$sample <- factor(df_long$sample, levels = df_long %>%
+  distinct(sample, sampletype) %>%
+  arrange(sampletype, sample) %>%
+  pull(sample))
+
+ggplot(df_long, aes(x = sample, y = expression, fill = sampletype)) +
+  geom_boxplot(outlier.shape = NA) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x = "Sample", y = "Log expression", fill = "Tipo campione")
+
+#PER BLOCCO
+df_long$blocco <- colData(pb)$blocco[match(df_long$sample, colnames(pb))]
+
+df_long$sample <- factor(df_long$sample, levels = df_long %>%
+  distinct(sample, blocco) %>%
+  arrange(blocco, sample) %>%
+  pull(sample))
+
+ggplot(df_long, aes(x = sample, y = expression, fill = blocco)) +
+  geom_boxplot(outlier.shape = NA) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(x = "Sample", y = "Log expression", fill = "Blocco")
+
+```
+
+## Tabella riassuntiva informazione campioni
+
+```{r}
+estrai_info <- function(spe, nome_campione) {
+  tt <- unique(colData(spe)$sampletype)
+  
+  res <- lapply(tt, function(t) {
+    n_nuclei <- sum(colData(spe)$sampletype == t)
+    total_umi <- sum(colData(spe)$ncounts[colData(spe)$sampletype == t])
+    n_geni <- sum(rowSums(counts(spe)[, colData(spe)$sampletype == t]) != 0)
+    
+    data.frame(
+      Campione = nome_campione,
+      Sample_Type = t,
+      Numero_Nuclei = n_nuclei,
+      Totale_UMI = total_umi,
+      Geni_Detectati = n_geni
+    )
+  })
+  
+  do.call(rbind, res)
+}
+```
+
+```{r}
+lapply(samples, function(x) {estrai_info(spe, x)})
+```
+
+#Aalisi dei geni differenzialmente espressi
+
+```{r}
+#Oggetto DGEList
+y <- DGEList(counts(pb), samples = colData(pb))
+#filtraggio geni
+y <- y[rowSums(y$counts) > 0, ]
+#per filtrare un po' di più
+min_samples <- ceiling(0.1 * ncol(y$counts))
+y <- y[rowSums(y$counts > 0) >= min_samples, ]
+
+#Normalizzazione TMM
+y <- calcNormFactors(y)
+```
+
+
+```{r}
+#Matrice del modello
+design <- model.matrix(~ 0 + sampletype, data = y$samples)
+
+#Stima dispersione e del modello
+y <- estimateDisp(y, design)
+fit <- glmFit(y, design)
+```
+
+
+```{r}
+#Contrasti:
+contrast_list <- list(
+    "C26_vs_SHAM" = makeContrasts(sampletypec26 - sampletypesham, levels = make.names(colnames(design))),
+    "FOXO_vs_C26" = makeContrasts(-sampletypec26, levels = make.names(colnames(design))),
+    "FOXO_vs_SHAM" = makeContrasts(-sampletypesham - sampletypesham, levels = make.names(colnames(design))),
+    "STAT3_vs_C26" = makeContrasts(sampletypec26STAT3 - sampletypec26, levels = make.names(colnames(design))),
+    "STAT3_vs_SHAM" = makeContrasts(sampletypec26STAT3 - sampletypesham, levels = make.names(colnames(design))),
+    "MURF1_vs_C26" = makeContrasts(sampletypec26murf1 - sampletypec26, levels = make.names(colnames(design))),
+    "MURF1_vs_SHAM" = makeContrasts(sampletypec26murf1 - sampletypesham, levels = make.names(colnames(design))),
+    "SMAD23_vs_C26" = makeContrasts(sampletypec26SMAD23 - sampletypec26, levels = make.names(colnames(design))),
+    "SMAD23_vs_SHAM" = makeContrasts(sampletypec26SMAD23 - sampletypesham, levels = make.names(colnames(design)))
+  )
+
+lrt1 <- glmLRT(fit, contrast = contrast_list$FOXO_vs_C26)
+lrt2 <- glmLRT(fit, contrast = contrast_list$C26_vs_SHAM)
+lrt3 <- glmLRT(fit, contrast = contrast_list$FOXO_vs_SHAM)
+lrt4 <- glmLRT(fit, contrast = contrast_list$STAT3_vs_C26)
+lrt5 <- glmLRT(fit, contrast = contrast_list$STAT3_vs_SHAM)
+lrt6 <- glmLRT(fit, contrast = contrast_list$MURF1_vs_C26)
+lrt7 <- glmLRT(fit, contrast = contrast_list$MURF1_vs_SHAM)
+lrt8 <- glmLRT(fit, contrast = contrast_list$SMAD23_vs_C26)
+lrt9 <- glmLRT(fit, contrast = contrast_list$SMAD23_vs_SHAM)
+```
+
+
+## Visualizzazione e salvataggio dei risultati
+
+```{r}
+library(openxlsx)
+
+analizza_confronto <- function(lrt_obj, nome_prefix) {
+  
+  res <- topTags(lrt_obj, n = Inf)$table
+  res$significant <- res$FDR < 0.05
+  
+  sig <- res[res$significant, ]
+  sig_up <- sig[sig$logFC >= 0, ]
+  sig_down <- sig[sig$logFC < 0, ]
+  
+  wb <- createWorkbook()
+  addWorksheet(wb, "Tutti_geni")
+  writeData(wb, "Tutti_geni", res, rowNames = TRUE)
+  addWorksheet(wb, "Significativi")
+  writeData(wb, "Significativi", sig, rowNames = TRUE)
+  addWorksheet(wb, "Upregolati")
+  writeData(wb, "Upregolati", sig_up, rowNames = TRUE)
+  addWorksheet(wb, "Downregolati")
+  writeData(wb, "Downregolati", sig_down, rowNames = TRUE)
+  saveWorkbook(wb, paste0("dge_", nome_prefix, ".xlsx"), overwrite = TRUE)
+  
+  gene_summary <- data.frame(
+    Descrizione = c(
+      "Geni considerati",
+      "Geni DE (significativi)",
+      "Geni DE upregolati",
+      "Geni DE downregolati"
+    ),
+    Numero = c(
+      nrow(res),
+      nrow(sig),
+      nrow(sig_up),
+      nrow(sig_down)
+    )
+  )
+  
+  return(gene_summary)
+}
+
+set.seed(1847)
+(ris1 <- analizza_confronto(lrt1, "FOXO_C26"))
+(ris2 <- analizza_confronto(lrt2, "C26_SHAM"))
+(ris3 <- analizza_confronto(lrt3, "FOXO_SHAM"))
+(ris4 <- analizza_confronto(lrt4, "STAT3_C26"))
+(ris5 <- analizza_confronto(lrt5, "STAT3_SHAM"))
+(ris6 <- analizza_confronto(lrt6, "MURF1_C26"))
+(ris7 <- analizza_confronto(lrt7, "MURF1_SHAM"))
+(ris8 <- analizza_confronto(lrt8, "SMAD23_C26"))
+(ris9 <- analizza_confronto(lrt9, "SMAD23_SHAM"))
+
+```
+

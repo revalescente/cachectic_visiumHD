@@ -17,19 +17,21 @@ library(SingleCellExperiment)
 
 
 # Read data 
-(sdata2 <- readSpatialData("/mnt/europa/valerio/data/zarr_store/blocchi/blocco3_sham.zarr", anndataR=TRUE))
-(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/general/b1_stat3.zarr", anndataR=TRUE))
+#(sdata2 <- readSpatialData("/mnt/europa/valerio/data/zarr_store/blocchi/blocco3_sham.zarr", anndataR=TRUE))
+#(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/general/b1_stat3.zarr", anndataR=TRUE))
+(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat4samples.zarr", anndataR=TRUE))
 
 shapes(sdata2)
-data(shape(sdata2))$metadata
+data(shape(sdata))$metadata
 metadata(shape(sdata2, 'blocco4_nuclei_boundaries'))
 
 # tables
-hasTable(sdata2, "blocco4_nuclei_boundaries")
+hasTable(sdata, "blocco2_c26_filtered_nuclei")
 # retrieve 'table' for an element
-getTable(sdata2, i <- "blocco4_nuclei_boundaries")
+getTable(sdata, i <- "blocco2_c26murf1_filtered_nuclei")
 
-spe <- tables(sdata2)$nuclei_counts_nop
+(spe <- tables(sdata)$nuclei_counts_nop)
+class(spe)
 meta(tables(sdata2)$nuclei_counts_nop)
 
 fim <- image(sdata2, "blocco4_full_image")
@@ -37,11 +39,6 @@ fim <- image(sdata2, "blocco4_full_image")
 # different scales with different resolution
 vapply(fim@data, dim, numeric(3))
 
-
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install("anndataR")
 
 
 

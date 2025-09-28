@@ -206,11 +206,11 @@ def divide_samples(blocco_sample_bbox_dict,
             # sopa metadata 
             sopa.utils.set_sopa_attrs(
                 sdata_subset,
-                cell_segmentation_image = f"{blocco}_full_image",
-                tissue_segmentation_image = f"{blocco}_full_image",
-                bins_table = "filtered"
+                cell_segmentation_key = f"{blocco}_full_image",
+                tissue_segmentation_key = f"{blocco}_full_image",
+                bins_table_key = "filtered"
             )
-            
+
             # Sanity check
             try:
                 sanity = sanity_check(sdata_subset)

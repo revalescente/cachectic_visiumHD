@@ -22,7 +22,7 @@ PROJECT_ROOT=$( realpath "$SCRIPT_DIR/../../../" )
 zarr_list=(
 "/mnt/europa/valerio/data/zarr_store/blocchi/blocco1_c26foxO.zarr"
 "/mnt/europa/valerio/data/zarr_store/blocchi/blocco1_c26STAT3.zarr"
-# "/mnt/europa/valerio/data/zarr_store/blocchi/blocco1_sham.zarr"
+"/mnt/europa/valerio/data/zarr_store/blocchi/blocco1_sham.zarr"
 "/mnt/europa/valerio/data/zarr_store/blocchi/blocco2_c26murf1.zarr"
 "/mnt/europa/valerio/data/zarr_store/blocchi/blocco2_c26SMAD23.zarr"
 "/mnt/europa/valerio/data/zarr_store/blocchi/blocco2_c26.zarr"

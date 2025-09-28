@@ -13,6 +13,8 @@ from typing import List
 import matplotlib.pyplot as plt
 from scipy import sparse
 from shapely.geometry import Point
+# from importlib import reload
+# reload(sf)
 
 # Function to create the vector with the cell_id of the bins 
 def bin_to_cell_id_vector(sdata, table_key: str):
@@ -73,7 +75,7 @@ def morphological_filtering(sdata, filters):
   nuclei_filter_key = f'{blocco_key}_filtered_nuclei'
   sdata[nuclei_filter_key] = sdata[f'{blocco_key}_nuclei_boundaries'].loc[cell_ids_to_keep]
   
-  sdata.write_element(nuclei_filter_key)
+  sdata.write_element(nuclei_filter_key, 'nuclei_counts_nop', overwrite = True)
   
   return sdata
 
@@ -459,10 +461,10 @@ def postprocess_step(sdata, expand_radius_ratio = None, no_overlap = True, filte
 
   attrs structure:
     sdata.attrs:
-      {'bins_table': 'filtered',
-       'boundaries_shapes': 'blocco9_intissue',
-       'cell_segmentation_image': 'blocco9_full_image',
-       'tissue_segmentation_image': 'blocco9_full_image'}
+      {'bins_table_key': 'filtered',
+       'boundaries_key': 'blocco9_intissue',
+       'cell_segmentation_key': 'blocco9_full_image',
+       'tissue_segmentation_key': 'blocco9_full_image'}
   '''
   # Set-up keys to define all the elements needed
   filename = sdata.path.stem  # 'blocco4_c26'
@@ -481,22 +483,22 @@ def postprocess_step(sdata, expand_radius_ratio = None, no_overlap = True, filte
   # 3. Post processing
   
   # 3a. nuclei aggregation with no overlap of bins in nuclei, after expansion
-  sopa.aggregate(sdata, key_added = 'nuclei_counts_nop', bins_key= "filtered",
-  shapes_key = f"{blocco_key}_nuclei_boundaries", expand_radius_ratio=expand_radius_ratio, min_transcripts=1,
-  min_intensity_ratio=0.1, no_overlap = no_overlap)
+  #sopa.aggregate(sdata, key_added = 'nuclei_counts_nop', bins_key= "filtered",
+  #shapes_key = f"{blocco_key}_nuclei_boundaries", expand_radius_ratio=expand_radius_ratio, min_transcripts=1,
+  #min_intensity_ratio=0.1, no_overlap = no_overlap)
 
   # 3b. Nuclei filtering based on morphological features
   # if filters not defined, use this one
-  if filters is None:
-    
-    filters = {'area': (50, 4000),  # filter out the bigger and smaller nuclei
-    'eccentricity': (None, 0.95), # filter the most parabolic nuclei (one edge almost straight)
-    'solidity': (0.7, None), # filter the most concave
-    'extent': (0.2, None)} # filter the most irregular nuclei (mix between parabolic and concave)
-    
-    sdata = morphological_filtering(sdata, filters)
-  else:
-    sdata = morphological_filtering(sdata, filters)
+  # if filters is None:
+  #   
+  #   filters = {'area': (50, 4000),  # filter out the bigger and smaller nuclei
+  #   'eccentricity': (None, 0.95), # filter the most parabolic nuclei (one edge almost straight)
+  #   'solidity': (0.7, None), # filter the most concave
+  #   'extent': (0.2, None)} # filter the most irregular nuclei (mix between parabolic and concave)
+  #   
+  #   sdata = morphological_filtering(sdata, filters)
+  # else:
+  #   sdata = morphological_filtering(sdata, filters)
   
   filtered_nuclei_key = f"{blocco_key}_filtered_nuclei"
   if filtered_nuclei_key not in sdata.shapes:
