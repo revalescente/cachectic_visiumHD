@@ -1,25 +1,25 @@
 import spatialdata as sd
-import spatialdata_plot
-from spatialdata import SpatialData
-from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
-from spatialdata.transformations import (Identity, set_transformation)
-import matplotlib.pyplot as plt
-import squidpy as sq
+#import spatialdata_plot
+#from spatialdata import SpatialData
+#from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
+#from spatialdata.transformations import (Identity, set_transformation)
 import numpy as np
-import scanpy as sc
-import matplotlib.pyplot as plt
+#import scanpy as sc
+#import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
 import os
-import gc
+#import gc
 import sopa
 import json
-import time
-from pathlib import Path
+#import time
+#from pathlib import Path
 from sopa.io.standardize import sanity_check, read_zarr_standardized
-from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
-from skimage.measure import regionprops_table
+#from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
+#from skimage.measure import regionprops_table
 import py_scripts.segmentation.segm_functions as sf
+
+sopa.settings.auto_save_on_disk = False
 
 sdata = read_zarr_standardized("/mnt/europa/valerio/data/zarr_store/blocchi/blocco6_sham.zarr")
 

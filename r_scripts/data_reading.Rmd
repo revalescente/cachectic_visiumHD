@@ -1,0 +1,66 @@
+---
+title: "Data reading"
+author: "Valerio Reffo"
+date: "2025-09-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(SpatialData)
+library(jsonlite)
+```
+
+# Concatenated samples
+
+```{r concat_data}
+(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
+```
+
+# List of all samples
+
+This dictionary has all the info needed to read the data
+```{r samples_dict, include=FALSE}
+samples_dict <- fromJSON("/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json")
+```
+
+Vector with samples name
+```{r }
+samples_key <- lapply(samples_dict, function(blocco) {
+  lapply(blocco, function(sample) {
+    return(sample$sample_key)
+  })
+}) |> unlist(use.names = FALSE)
+samples_key
+```
+
+```{r reading_function, include=FALSE}
+read_samples_list <- function(samples)
+{
+  spe_list <- lapply(samples, function(sample) {
+    sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/samples/", sample, ".zarr"), anndataR=TRUE)
+    tables(sdata)$nuclei_counts_nop
+  })
+  names(spe_list) = samples
+  return(spe_list)
+}
+```
+
+
+```{r samples_list}
+spe_list = read_samples_list(samples_key)
+spe_list
+```
+
+Let's remove the empty samples 
+
+```{r}
+spe_list <- spe_list[!sapply(spe_list, is.null)]
+length(spe_list)
+```
+
+
+

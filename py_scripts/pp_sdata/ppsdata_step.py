@@ -21,7 +21,7 @@ import py_scripts.pp_sdata.pp_functions as pp
 
 # 1. read data and filtering, then saving it back in a new zarr
 # select the number of blocks to pp if you want
-pp.preprocess_step(block_numbers = None)
+pp.preprocess_step(block_numbers = 1)
 
 # 2. dividing samples into individual zarr stores
 

@@ -13,13 +13,11 @@ knitr::opts_chunk$set(echo = TRUE)
 library(Matrix)
 library(jsonlite)
 library(arrow)
-library(png)
 library(SummarizedExperiment)
 library(S4Vectors)
 library(ggspavis)
 library(SpatialExperiment)
 library(patchwork)
-library(VisiumIO)
 library(edgeR)
 library(scater)
 library(scuttle)
@@ -31,15 +29,14 @@ library(SpotSweeper)
 library(ggplot2)
 library(patchwork)
 library(ggnewscale)
+library(tidyr)
 
 # libreria per leggere i dati e plottarli
 library(SpatialData)
 library(SpatialData.plot)
 ```
 
-# Analisi Esplorativa dei dati di 4 campioni 
-
-La matrice dei dati consiste di `r dim(spe)[1]` geni e `r dim(spe)[2]` nuclei, divisi tra 4 campioni
+# Analisi Esplorativa dei dati di 22 su 24 campioni (a parte un paio del blocco 6)
 
 ```{r message=FALSE, warning=FALSE}
 (sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
@@ -51,6 +48,7 @@ Estraiamo l'anndata aka il SingleCellExperiment
 (spe <- tables(sdata)$nuclei_counts_nop)
 ```
 
+La matrice dei dati consiste di `r dim(spe)[1]` geni e `r dim(spe)[2]` nuclei, divisi tra 22 campioni
 
 ```{r}
 colData(spe)$ncounts <- colSums(assay(spe))
@@ -62,6 +60,138 @@ assay(spe, "X") = NULL
 ```{r}
 spe$cell_id = colnames(spe)
 colnames(spe) = seq(1, dim(spe)[2], by = 1)
+```
+
+# Grafici esplorativi
+
+```{r}
+# Create a data frame (or tibble) where each vector is a column
+long_df <- tibble(
+  area = spe$area,
+  eccentricity = spe$eccentricity,
+  solidity = spe$solidity,
+  extent = spe$extent,
+  sample_id = spe$sample_id,
+  sampletype = spe$sampletype,
+  blocco = spe$blocco
+) |> 
+  pivot_longer(
+    cols = all_of(c("eccentricity", "solidity", "area", "extent")),
+    names_to = "metric",
+    values_to =
+  )
+long_df
+```
+
+```{r}
+ggplot(long_df, aes(x = value)) +
+  geom_histogram(aes(fill = sampletype), bins = 40, show.legend = FALSE) +
+  facet_wrap(~ metric, scales = "free", ncol = 3) + # You can adjust ncol
+  
+  labs(
+    title = "Distributions of Morphological Metrics",
+    subtitle = "Each metric is shown with its own independent axis scale",
+    x = "Value",
+    y = "Frequency"
+  ) +
+  theme_bw()
+```
+
+
+```{r}
+all_metrics <- unique(long_df$metric)
+
+# Loop through each metric name
+for (current_metric in all_metrics) {
+  
+  # --- Filter the data for the current metric ---
+  metric_df <- long_df %>%
+    filter(metric == current_metric)
+  
+  # --- Create the plot for the current metric ---
+  # We use facet_grid to create a matrix of plots based on your grouping variables.
+  p <- ggplot(metric_df, aes(x = value)) +
+    geom_histogram(aes(fill = sampletype), bins = 40, show.legend = FALSE) +
+    
+    # Create a grid of plots:
+    # Rows will be the different 'blocco'
+    # Columns will be the different 'sampletype'
+    # `scales = "free_y"` allows the y-axis (count) to be different for each row.
+    facet_grid(blocco ~ sampletype, scales = "free_y") +
+    
+    # Add informative titles that change with each loop
+    labs(
+      title = paste("Distribution of:", current_metric),
+      subtitle = "Faceted by Block and Sample Type",
+      x = current_metric,
+      y = "Frequency"
+    ) +
+    theme_bw() +
+    theme(
+      strip.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5) # Rotate labels if they overlap
+    )
+  
+  # --- Print the plot to the screen ---
+  # In an interactive session, this will display the plot for the current metric.
+  print(p)
+  
+  # --- (Optional but Recommended) Save the plot to a file ---
+  # This saves each plot as a separate PNG file in your working directory.
+  ggsave(
+    filename = paste0("distribution_", current_metric, ".png"),
+    path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/eda",
+    plot = p,
+    width = 12,
+    height = 9,
+    dpi = 300
+  )
+}
+```
+
+Plot singolo di area che devo limare x
+
+```{r}
+metric_df <- long_df %>%
+    filter(metric == "area")
+  
+  # --- Create the plot for the current metric ---
+  # We use facet_grid to create a matrix of plots based on your grouping variables.
+p <- ggplot(metric_df, aes(x = value)) +
+    geom_histogram(aes(fill = sampletype), bins = 40, show.legend = FALSE) +
+    
+    # Create a grid of plots:
+    # Rows will be the different 'blocco'
+    # Columns will be the different 'sampletype'
+    # `scales = "free_y"` allows the y-axis (count) to be different for each row.
+    facet_grid(blocco ~ sampletype, scales = "free_y") +
+    
+    # Add informative titles that change with each loop
+    labs(
+      title = paste("Distribution of:", "area"),
+      subtitle = "Faceted by Block and Sample Type",
+      x = "Area",
+      y = "Frequency"
+    ) +
+    xlim(0, 2000)
+    theme_bw() +
+    theme(
+      strip.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5) # Rotate labels if they overlap
+  )
+  
+  # --- Print the plot to the screen ---
+  # In an interactive session, this will display the plot for the current metric.
+
+  
+  # --- (Optional but Recommended) Save the plot to a file ---
+  # This saves each plot as a separate PNG file in your working directory.
+ggsave(
+    filename = "distribution_area.png",
+    path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/eda",
+    plot = p,
+    width = 12,
+    height = 9,
+    dpi = 300
+)
 ```
 
 
@@ -107,6 +237,7 @@ Non ci sono Geni ribosomiali
 
 ```{r}
 pb <- aggregateAcrossCells(spe, use.assay.type = "counts", ids=spe$sample_id)
+
 pb
 colData(pb)
 ```

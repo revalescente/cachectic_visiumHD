@@ -1,0 +1,204 @@
+---
+title: "deconvolution"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(arrow)
+library(Banksy)
+library(BiocParallel)
+library(DropletUtils)
+library(dplyr)
+library(edgeR)
+library(ggplot2)
+library(graphics)
+library(igraph)
+library(jsonlite)
+library(Matrix)
+library(patchwork)
+library(pheatmap)
+library(S4Vectors)
+library(scDblFinder)
+library(scater)
+library(scran)
+library(scuttle)
+library(SingleCellExperiment)
+library(SpatialExperiment)
+library(SummarizedExperiment)
+library(tidyr)
+library(VisiumIO)
+library(spacexr)
+library(SpotSweeper)
+library(ggspavis)
+```
+
+#Funzione per deconvoluzione: Robust Cell Type Decomposition (spacexr)
+```{r rctd_function}
+run_my_rctd <- function(spe, sce_ref, seed = 123) 
+{
+  set.seed(seed)
+  # rownames(spe) <- rowData(spe)$Symbol
+  # rownames(spe) <- make.unique(rownames(spe))
+  
+  # preparazione dataset
+  rctd_data <- createRctd(
+    spatial_experiment = spe,
+    reference_experiment = sce_ref,
+    cell_type_col = "subclusters"
+  )
+  
+  # deconvoluzione
+  results <- runRctd(rctd_data, rctd_mode = "multi")
+  
+  # Estrazione pesi
+  ws <- assay(results, "weights")
+  ws <- data.frame(t(as.matrix(ws)))
+  colData(spe)[names(ws)] <- ws[colnames(spe), ] #salvo tutti i pesi in spe
+  
+  return(spe)
+}
+```
+
+```{r rctd_plot}
+plot_rctd <- function(spe, sample)
+{
+  
+  #Rappresentazione di tutti i tipi cellulari
+  p <- lapply(names(ws), \(.) 
+    plotCoords(spe, annotate = ., point_size = 0.1)
+  ) |>
+    wrap_plots(nrow = 3, ncol=5, guides = "collect") & 
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      strip.text = element_text(size = 5) 
+    ) & 
+    scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+  ggsave(paste0(sample, "_types.png"), p, width = 10, height = 8, dpi = 300)
+  
+  # Assegna cluster
+  ids <- names(ws)[apply(ws, 1, which.max)]
+  ids <- gsub("\\.([A-z])", " \\1", ids)
+  idx <- match(colnames(spe), rownames(ws))
+  spe$cell_type <- factor(ids[idx]) #salvo le annotazioni (peso di maggioranza)
+  print(table(spe$cell_type))
+  
+  #Visualizzazione annotazioni
+ your_color_vector <- c(
+    "Endothelial" = "#0072B2",       # blu vivo
+    "FAPs" = "#009E73",              # verde vivo
+    "Immune_Cells" = "#D55E00",      # arancione-rosso
+    "MuSC" = "#E69F00",              # arancione
+    "Myonuclei_IIb" = "#CC79A7",     # magenta
+    "Myonuclei_IIx" = "#56B4E9",     # azzurro chiaro
+    "Myonuclei_IIx_IIa" = "#F0E442", # giallo
+    "Myonuclei_IIx_IIb" = "#9B59B6", # viola chiaro
+    "Myonuclei_MTJ" = "#0099B4",     # turchese
+    "Myonuclei_NMJ" = "#DDAA33",     # senape
+    "Myonuclei_Trim63" = "#CC3311",  # rosso scuro
+    "Nervous_System" = "#44AA99",    # verde acqua
+    "Pericyte" = "#AA4499",          # viola/rosa
+    "Smooth_Muscular" = "#332288",   # blu-viola scuro
+    "Tenocyte" = "#A3E635"           # verde lime
+)
+
+  stat1 <- plotCoords(spe, annotate = "cell_type", point_size = 0.5) +
+    scale_color_manual(values = your_color_vector) +
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines")
+    )
+  
+  ggsave(paste0(sample, "_dec.png"), stat1, width = 10, height = 8, dpi = 300)
+  
+}
+```
+
+
+# Reference: single cell RNA-seq
+
+Reading sce data
+
+```{r}
+sce_ref <- readRDS("/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds")
+sce_ref
+```
+
+Reading all the samples in a list
+
+```{r samples_dict, include=FALSE}
+samples_dict <- fromJSON("/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json")
+```
+
+Vector with samples name
+```{r }
+samples_key <- lapply(samples_dict, function(blocco) {
+  lapply(blocco, function(sample) {
+    return(sample$sample_key)
+  })
+}) |> unlist(use.names = FALSE)
+
+```
+
+```{r reading_function, include=FALSE}
+read_samples_list <- function(samples)
+{
+  spe_list <- lapply(samples, function(sample) {
+    sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/samples/", sample, ".zarr"), anndataR=TRUE)
+    tables(sdata)$nuclei_counts_nop
+  })
+  names(spe_list) = samples
+  return(spe_list)
+}
+```
+
+
+```{r samples_list}
+spe_list = read_samples_list(samples_key[c(2,4)])
+spe_list <- spe_list[!sapply(spe_list, is.null)]
+```
+
+Apply the Rctd algorithm
+
+```{r}
+# for (i in 15:length(subset_list)) {
+#     name <- names(subset_list)[i]
+#     run_my_rctd(subset_list[[name]], sce_ref, name)
+# }
+
+lapply(samples_key, function(sample) run_my_rctd(spe_list[[sample]], sce_ref, sample))
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,118 @@
+---
+title: "Cell type annotation with sgdGMF"
+author: "Valerio Reffo"
+date: "2025-09-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(Matrix)
+library(jsonlite)
+library(arrow)
+library(SummarizedExperiment)
+library(S4Vectors)
+library(SpatialExperiment)
+library(VisiumIO)
+library(edgeR)
+library(scuttle)
+library(scran)
+library(dplyr)
+library(SingleCellExperiment)
+library(Seurat)
+library(ggplot2)
+library(sgdGMF)
+```
+
+#Creo un oggetto sce per ogni singolo campione
+
+```{r}
+
+load("speHD1_f.RData")
+load("speHD2_f.RData")
+load("speHD3_f.RData")
+load("speHD4_f.RData")
+load("speHD5_f.RData")
+load("speHD6_f.RData")
+load("speHD7_f.RData")
+load("speHD9_f.RData")
+
+crea_sce <- function(spe_obj, block) {
+  rownames(spe_obj) <- rowData(spe_obj)$Symbol
+  tissue_type <- unique(spe_obj$tissue_type)
+  sce_list <- list()
+  # Per ogni tipo di tessuto, creo un oggetto SingleCellExperiment
+  for (sample in tissue_type) {
+    name <- paste0(sample, "_", block)
+    sce_list[[name]] <- SingleCellExperiment(assays = list(
+      counts = counts(spe_obj)[, spe_obj$tissue_type == sample]
+    ))
+  }
+  return(sce_list)
+}
+sce_hd1 <- crea_sce(speHD1_f, "b1")
+sce_hd2 <- crea_sce(speHD2_f, "b2")
+sce_hd3 <- crea_sce(speHD3_f, "b3")
+sce_hd4 <- crea_sce(speHD4_f, "b4")
+sce_hd5 <- crea_sce(speHD5_f, "b5")
+sce_hd6 <- crea_sce(speHD6_f, "b6")
+sce_hd7 <- crea_sce(speHD7_f, "b7")
+sce_hd9 <- crea_sce(speHD9_f, "b9")
+
+#aggiungere già esplicitamente l'info blocco?
+sce_list <- c(sce_hd1,sce_hd2,sce_hd3,sce_hd4,sce_hd5,sce_hd6,sce_hd7,sce_hd9)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

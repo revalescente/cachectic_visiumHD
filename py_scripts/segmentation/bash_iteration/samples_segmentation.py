@@ -35,6 +35,6 @@ path_sdata = sys.argv[1]
 print(f"Processing file: {path_sdata}")
 
 sdata = read_zarr_standardized(path_sdata)
-sdata = sf.postprocess_step(sdata)
+sdata = sf.postprocess_step(sdata, expand_radius_ratio = 1)
 
 print(f"Finished processing: {path_sdata}")
