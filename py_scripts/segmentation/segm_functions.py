@@ -58,10 +58,8 @@ def morphological_filtering(sdata, filters):
   
   blocco_key, samples_key = match.group(1), match.group(2)
   
-  # --- CHANGE IS HERE ---
-  # The try...except block has been removed.
   # If features_extraction fails, the error will now stop the script.
-  features_df = features_extraction(sdata, nuclei_element_name=f"{blocco_key}_nuclei_boundaries")
+  features_df = features_extraction(sdata, nuclei_element_name=f"nuclei_boundaries")
   print("Successfully extracted features.\n")
   
   # This code will only run if features_extraction succeeds
@@ -72,8 +70,8 @@ def morphological_filtering(sdata, filters):
 
   cell_ids_to_keep = filtered.index.tolist()
   
-  nuclei_filter_key = f'{blocco_key}_filtered_nuclei'
-  sdata[nuclei_filter_key] = sdata[f'{blocco_key}_nuclei_boundaries'].loc[cell_ids_to_keep]
+  nuclei_filter_key = 'filtered_nuclei'
+  sdata[nuclei_filter_key] = sdata['nuclei_boundaries'].loc[cell_ids_to_keep]
   
   sdata.write_element(nuclei_filter_key, 'nuclei_counts_nop', overwrite = True)
   
@@ -141,17 +139,10 @@ def features_extraction(sdata, nuclei_element_name = "nuclei_boundaries"):
     if nuclei_element_name not in sdata.shapes:
         raise ValueError(f"'{nuclei_element_name}' not found in sdata.shapes.")
     # 2. --- Extract Coordinate System Key ---
-    try:
-        # Assumes a pattern like 'blocco1' is the coordinate system name
-        blocco_key_match = re.search(r'(blocco\d+)', sdata.attrs['cell_segmentation_image'])
-        if not blocco_key_match:
-            raise ValueError("Could not find a 'bloccoN' key in sdata.attrs['cell_segmentation_image'].")
-        blocco_key = blocco_key_match.group(1)
-    except (KeyError, AttributeError):
-        raise ValueError(f"sdata.attrs['cell_segmentation_image'] is missing or invalid: {sdata.attrs}")
-    # 3. --- Rasterize Nuclei Polygons ---
-    raster_key = f"{blocco_key}_raster_nuclei"
-    element_extent = sd.get_extent(sdata[nuclei_element_name], coordinate_system=blocco_key, exact=True)
+    sample_id = sdata.path.stem
+     # 3. --- Rasterize Nuclei Polygons ---
+    raster_key = f"raster_nuclei"
+    element_extent = sd.get_extent(sdata[nuclei_element_name], coordinate_system=sample_id, exact=True)
     sdata[raster_key] = sd.rasterize(
         sdata[nuclei_element_name],
         axes=["x", "y"],
@@ -292,7 +283,7 @@ def sopa_attrs_check(sdata):
     Notes
     -----
     This function expects 'bins_table_key' to be 'filtered' and 'cell_segmentation_key'
-    to follow the pattern '{blocco}_full_image'.
+    to follow the pattern 'full_image'.
     """
     # Extract required attributes
     attrs = sdata.attrs
@@ -425,10 +416,10 @@ def segmentation_step(sdata):
        'tissue_segmentation_image': 'blocco9_full_image'}
   '''
   # Set-up keys to define all the elements needed
-  filename = sdata.path.stem  # 'blocco4_c26'
+  sample_id = sdata.path.stem  # 'blocco4_c26'
 
   # Use regex to extract blocco_key and samples_key
-  match = re.match(r'(blocco\d+)_(\w+)', filename)
+  match = re.match(r'(blocco\d+)_(\w+)', sample_id)
   if match:
       blocco_key, samples_key = match.group(1), match.group(2)
       
@@ -436,41 +427,43 @@ def segmentation_step(sdata):
       raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata_path}")
 
   # set-up sopa metadata
-  sopa_attrs_check(sdata)
+  # sopa_attrs_check(sdata)
   
   # 2. Segmentation
-  
-  # # intissue polygons cleaned - added in the function to preprocess the samples
-  # sdata['blocco4_intissue'] = sdata['blocco4_intissue'][sdata['blocco4_intissue'].name=="c26"]
-  
   # 2a. Divide the images in patches (overlapping if wanted)
-  sopa.make_image_patches(sdata, patch_width = 300, roi_key = f"{blocco_key}_intissue")
+  sopa.make_image_patches(sdata, patch_width = 300, roi_key = "intissue_poly")
   
   # 2c. Segmentation with stardist algorithm
   sopa.segmentation.stardist(sdata, model_type='2D_versatile_he', 
   image_key= sdata.attrs['cell_segmentation_image'], min_area=10, delete_cache=True, 
-  recover=False, prob_thresh=0.2, nms_thresh=0.6, key_added = f'{blocco_key}_nuclei_boundaries')
+  recover=False, prob_thresh=0.2, nms_thresh=0.6, key_added = f'nuclei_boundaries')
   
   return sdata
   
 # Post processing function 
 
-def postprocess_step(sdata, expand_radius_ratio = 1, no_overlap = True, filters = None, **kwargs):
+def postprocess_step(sdata, 
+                    expand_radius_ratio = 1, 
+                    min_transcripts = 4,
+                    min_intensity_ratio = 0.15,
+                    no_overlap = True, 
+                    filters = None, 
+                    **kwargs
+):
   '''
   Function to apply post processing to our data, one sample at a time
 
   attrs structure:
     sdata.attrs:
       {'bins_table_key': 'filtered',
-       'boundaries_key': 'blocco9_intissue',
-       'cell_segmentation_key': 'blocco9_full_image',
-       'tissue_segmentation_key': 'blocco9_full_image'}
+       'cell_segmentation_key': 'full_image',
+       'tissue_segmentation_key': 'full_image'}
   '''
   # Set-up keys to define all the elements needed
-  filename = sdata.path.stem  # 'blocco4_c26'
+  sample_id = sdata.path.stem  # 'blocco4_c26'
 
   # Use regex to extract blocco_key and samples_key
-  match = re.match(r'(blocco\d+)_(\w+)', filename)
+  match = re.match(r'(blocco\d+)_(\w+)', sample_id)
   if match:
       blocco_key, samples_key = match.group(1), match.group(2)
       
@@ -478,17 +471,17 @@ def postprocess_step(sdata, expand_radius_ratio = 1, no_overlap = True, filters 
       raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata_path}")
 
   # set-up sopa metadata
-  sopa_attrs_check(sdata)
+  # sopa_attrs_check(sdata)
   
   # 3. Post processing
   
   # 3a. nuclei aggregation with no overlap of bins in nuclei, after expansion
-  sopa.aggregate(sdata, key_added = 'nuclei_counts_nop2', bins_key= "filtered",
-  shapes_key = f"{blocco_key}_nuclei_boundaries", expand_radius_ratio=expand_radius_ratio, min_transcripts=1,
-  min_intensity_ratio=0.1, no_overlap = no_overlap)
+  sopa.aggregate(sdata, key_added = 'nuclei_counts_nop', bins_key= "filtered",
+  shapes_key = "nuclei_boundaries", expand_radius_ratio=expand_radius_ratio, min_transcripts=min_transcripts,
+  min_intensity_ratio=min_intensity_ratio, no_overlap = no_overlap)
 
   # 3b. Nuclei filtering based on morphological features
-  if filters not defined, use this one
+  # if filters not defined, use this one
   if filters is None:
 
     filters = {'area': (50, 4000),  # filter out the bigger and smaller nuclei
@@ -500,10 +493,10 @@ def postprocess_step(sdata, expand_radius_ratio = 1, no_overlap = True, filters 
   else:
     sdata = morphological_filtering(sdata, filters)
   
-  filtered_nuclei_key = f"{blocco_key}_filtered_nuclei"
+  filtered_nuclei_key = "filtered_nuclei"
   if filtered_nuclei_key not in sdata.shapes:
       print(f"Error: The element '{filtered_nuclei_key}' was not found in sdata.shapes after morphological filtering.")
-      print(f"Stopping post-processing for sample '{filename}'. Please check the filtering step.")
+      print(f"Stopping post-processing for sample '{sample_id}'. Please check the filtering step.")
       return sdata # Stop the function and return the sdata object as-is
   
   # 3c. Annotating the table with the spatial element (nuclei polys)
@@ -514,10 +507,10 @@ def postprocess_step(sdata, expand_radius_ratio = 1, no_overlap = True, filters 
   sdata['nuclei_counts_nop'] = sd.match_table_to_element(sdata, element_name = filtered_nuclei_key, table_name='nuclei_counts_nop')
   
   # 3e. Filtering bins_gdf 
-  sdata[f'{blocco_key}_intissue_002um']['cell_id'] = bin_to_cell_id_vector(sdata, table_key = 'nuclei_counts_nop')
-  sdata[f'{blocco_key}_filtered_bins'] = sdata[f'{blocco_key}_intissue_002um'][sdata[f'{blocco_key}_intissue_002um']['cell_id'].notna()]
-  filtered_bins = f'{blocco_key}_filtered_bins'
-  sdata.write_element(filtered_bins)
+  # sdata['intissue_002um']['cell_id'] = bin_to_cell_id_vector(sdata, table_key = 'nuclei_counts_nop')
+  # sdata['filtered_bins'] = sdata['intissue_002um'][sdata['intissue_002um']['cell_id'].notna()]
+  # filtered_bins = 'filtered_bins'
+  # sdata.write_element(filtered_bins)
   
   # If you want to annotate the table of the genes vs nuclei with the filtered bins 
   # sdata['nuclei_counts_nop'].obs['region'] = 'blocco4_intissue_filter'

@@ -114,8 +114,6 @@ for blocco, samples in subset_dict.items():
         zarr_path = f"/mnt/europa/valerio/data/zarr_store/blocchi/{zarr_name}.zarr"
         spe_blocks[zarr_name] = read_zarr_standardized(zarr_path)
 
-read_zarr_standardized("/mnt/europa/valerio/data/zarr_store/blocchi/.zarr")
-
 # ok, creating and writing this data work, check with a plot
 
 # rasterize --------------------------------------------------------------------
