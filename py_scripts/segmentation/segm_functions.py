@@ -70,10 +70,9 @@ def morphological_filtering(sdata, filters):
 
   cell_ids_to_keep = filtered.index.tolist()
   
-  nuclei_filter_key = 'filtered_nuclei'
-  sdata[nuclei_filter_key] = sdata['nuclei_boundaries'].loc[cell_ids_to_keep]
-  
-  sdata.write_element(nuclei_filter_key, 'nuclei_counts_nop', overwrite = True)
+  sdata['filtered_nuclei'] = sdata['nuclei_boundaries'].loc[cell_ids_to_keep]
+  # copy for saving
+  sdata['nuclei_counts'] = sdata['nuclei_counts_nop'].copy()
   
   return sdata
 
@@ -139,10 +138,16 @@ def features_extraction(sdata, nuclei_element_name = "nuclei_boundaries"):
     if nuclei_element_name not in sdata.shapes:
         raise ValueError(f"'{nuclei_element_name}' not found in sdata.shapes.")
     # 2. --- Extract Coordinate System Key ---
-    sample_id = sdata.path.stem
-     # 3. --- Rasterize Nuclei Polygons ---
+    filename = sdata.path.stem
+    match = re.match(r'(blocco\d+)_(\w+)', filename)
+    if not match:
+        # Corrected to use sdata.path which is available
+      raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata.path}")
+    blocco_key = match.group(1)
+    
+    # 3. --- Rasterize Nuclei Polygons ---
     raster_key = f"raster_nuclei"
-    element_extent = sd.get_extent(sdata[nuclei_element_name], coordinate_system=sample_id, exact=True)
+    element_extent = sd.get_extent(sdata[nuclei_element_name], coordinate_system=blocco_key, exact=True)
     sdata[raster_key] = sd.rasterize(
         sdata[nuclei_element_name],
         axes=["x", "y"],
@@ -457,7 +462,8 @@ def postprocess_step(sdata,
     sdata.attrs:
       {'bins_table_key': 'filtered',
        'cell_segmentation_key': 'full_image',
-       'tissue_segmentation_key': 'full_image'}
+       'tissue_segmentation_key': 'full_image',
+       'boundaries_shapes': 'nuclei_boundaries'}
   '''
   # Set-up keys to define all the elements needed
   sample_id = sdata.path.stem  # 'blocco4_c26'
@@ -492,32 +498,6 @@ def postprocess_step(sdata,
     sdata = morphological_filtering(sdata, filters)
   else:
     sdata = morphological_filtering(sdata, filters)
-  
-  filtered_nuclei_key = "filtered_nuclei"
-  if filtered_nuclei_key not in sdata.shapes:
-      print(f"Error: The element '{filtered_nuclei_key}' was not found in sdata.shapes after morphological filtering.")
-      print(f"Stopping post-processing for sample '{sample_id}'. Please check the filtering step.")
-      return sdata # Stop the function and return the sdata object as-is
-  
-  # 3c. Annotating the table with the spatial element (nuclei polys)
-  sdata["nuclei_counts_nop"].obs["region"] = filtered_nuclei_key
-  sdata.set_table_annotates_spatialelement("nuclei_counts_nop", region = filtered_nuclei_key, region_key="region", instance_key="cell_id")
-  
-  # 3d. matching table with the filtered nuclei
-  sdata['nuclei_counts_nop'] = sd.match_table_to_element(sdata, element_name = filtered_nuclei_key, table_name='nuclei_counts_nop')
-  
-  # 3e. Filtering bins_gdf 
-  # sdata['intissue_002um']['cell_id'] = bin_to_cell_id_vector(sdata, table_key = 'nuclei_counts_nop')
-  # sdata['filtered_bins'] = sdata['intissue_002um'][sdata['intissue_002um']['cell_id'].notna()]
-  # filtered_bins = 'filtered_bins'
-  # sdata.write_element(filtered_bins)
-  
-  # If you want to annotate the table of the genes vs nuclei with the filtered bins 
-  # sdata['nuclei_counts_nop'].obs['region'] = 'blocco4_intissue_filter'
-  # sdata.set_table_annotates_spatialelement('nuclei_counts_nop', region = 'blocco4_filtered_bins', region_key=None, instance_key = 'cell_id')
-  
-  # let's remove a residual of the segmentation process that isn't usefull anymore
-  sdata.delete_element_from_disk('image_patches')
   
   return sdata
 

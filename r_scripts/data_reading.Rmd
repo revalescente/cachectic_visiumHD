@@ -10,14 +10,24 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r library, message=FALSE, warning=FALSE, include=FALSE}
-library(SpatialData)
+library(ggplot2)
 library(jsonlite)
+library(anndataR)
+library(SummarizedExperiment)
+library(scuttle)
+# to read spatialdata objects
+library(ggnewscale)
+library(SpatialData)
+library(SingleCellExperiment)
 ```
 
 # Concatenated samples
 
+Al momento non è disponibile un file concatenato perché non riesco a farlo funzionare in python. Si può fare da R molto più 
+tranquillamente.
 ```{r concat_data}
-(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
+#(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
+
 ```
 
 # List of all samples
@@ -42,25 +52,96 @@ read_samples_list <- function(samples)
 {
   spe_list <- lapply(samples, function(sample) {
     sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/samples/", sample, ".zarr"), anndataR=TRUE)
-    tables(sdata)$nuclei_counts_nop
+    tables(sdata)$nuclei_counts
   })
   names(spe_list) = samples
   return(spe_list)
 }
 ```
 
-
 ```{r samples_list}
 spe_list = read_samples_list(samples_key)
 spe_list
 ```
 
-Let's remove the empty samples 
+
+#-----------------------------------------------------------------------------
+
+# Manual blasfemy
+Nothing is working so I'll read data as single samples SingleCellExperiment
+load spatial coordinates as csv and then build the objects I need manually.
+
+(now is working - i need not only spatialdata to read spatialdata but also sce library)
 
 ```{r}
-spe_list <- spe_list[!sapply(spe_list, is.null)]
-length(spe_list)
+read_samples_adatas <- function(samples)
+{
+  sce_list <- lapply(samples, function(sample) {
+    h5ad_path <- paste0("/mnt/europa/valerio/data/zarr_store/adatas/", sample, ".h5ad")
+    sce <- read_h5ad(h5ad_path, to = "SingleCellExperiment")
+  })
+  names(sce_list) = samples
+  return(sce_list)
+}
+```
+
+```{r}
+sce_list = read_samples_adatas(samples_key)
+#sce_list
+```
+
+# Preparation of the different objects
+
+## Single Cell Experiment
+Adding some useful information to the colData and filtering low genes/counts nuclei
+
+```{r}
+
+for(nm in names(sce_list)) {
+  blocco <- strsplit(nm, "_")[[1]][1]
+  sampletype <- strsplit(nm, "_")[[1]][2]
+  colData(sce_list[[nm]])$blocco <- blocco
+  colData(sce_list[[nm]])$sampletype <- sampletype
+  colData(sce_list[[nm]])$ncounts <- colSums(assay(sce_list[[nm]]))
+  colData(sce_list[[nm]])$ngenes <- Matrix::colSums(assay(sce_list[[nm]]) > 0)
+  sce_list[[nm]] <- sce_list[[nm]][, colData(sce_list[[nm]])$ncounts >= quantile(colData(sce_list[[nm]])$ncounts, 0.05) &
+                       colData(sce_list[[nm]])$ngenes >= quantile(colData(sce_list[[nm]])$ngenes, 0.05)]
+}
+```
+
+## Single sce object
+```{r}
+sce_merged <- do.call(cbind, sce_list)
+sce_merged
+```
+
+Ok le dimensioni corrispondono
+
+```{r}
+sum(sapply(sce_list, ncol))
+dim(sce_merged)
 ```
 
 
+## Pseudobulk
+
+```{r}
+pb_list <- lapply(sce_list, function(sce) {
+  aggregateAcrossCells(sce, ids = colData(sce)$sampletype, use.assay.type = "X")
+})
+# Combine
+all_counts <- do.call(cbind, lapply(pb_list, assay))
+all_colData <- do.call(rbind, lapply(pb_list, colData))
+pb <- SingleCellExperiment(assays=list(counts=all_counts), colData=all_colData)
+```
+
+
+# Saving objects
+
+Pseudobulk
+```{r}
+# save(pb, file = "/mnt/europa/valerio/data/Rdata/pseudobulk_nuclei.RData")
+# save(sce_merged, file = "/mnt/europa/valerio/data/Rdata/sce_merged_nuclei.RData")
+# save(sce_list, file = "/mnt/europa/valerio/data/Rdata/sce_list_nuclei.RData")
+```
 
