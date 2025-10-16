@@ -1,3 +1,3 @@
-# Spatial Transcriptomics analysis of murine's cachetic muscle tissue 
+# Spatial Transcriptomics analysis of murine's cachectic muscle tissue 
 
 Work in progress
