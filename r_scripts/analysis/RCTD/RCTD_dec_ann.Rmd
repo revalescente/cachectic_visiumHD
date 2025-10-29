@@ -1,0 +1,455 @@
+---
+title: "deconvolution"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(Banksy)
+library(DropletUtils)
+library(dplyr)
+library(ggplot2)
+library(jsonlite)
+library(patchwork)
+library(scDblFinder)
+library(SingleCellExperiment)
+library(SpatialExperiment)
+library(tidyr)
+library(spacexr)
+library(SpotSweeper)
+library(writexl)
+library(ggspavis)
+```
+
+# Deconvolution
+
+## Data reading
+
+Paths
+```{r}
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/cell_dec/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/DEC_ANN/"
+```
+
+
+SpatialExperiment of all merged samples
+```{r}
+load(paste0(Rd_path, "spe_list_nuclei.RData"))
+```
+
+Reference dataset from Elena
+```{r}
+sce_ref <- readRDS(ref_path)
+```
+
+## Robust Cell Type Decomposition (spacexr)
+
+```{r rctd_function}
+run_my_rctd <- function(spe, sce_ref, seed = 123) 
+{
+  set.seed(seed)
+  # rownames(spe) <- rowData(spe)$Symbol
+  rownames(spe) <- make.unique(rownames(spe))
+  # colnames(spe) <- as.character(seq_len(ncol(spe)))
+
+  
+  # preparazione dataset
+  rctd_data <- createRctd(
+    spatial_experiment = spe,
+    reference_experiment = sce_ref,
+    cell_type_col = "subclusters"
+  )
+  
+  # deconvoluzione
+  results <- runRctd(rctd_data, rctd_mode = "multi")
+  
+  # Estrazione pesi
+  ws <- assay(results, "weights")
+  ws <- data.frame(t(as.matrix(ws)))
+  colData(spe)[names(ws)] <- ws[colnames(spe), ] #salvo tutti i pesi in spe
+  
+  # Assegna cluster
+  ids <- names(ws)[apply(ws, 1, which.max)]
+  ids <- gsub("\\.([A-z])", " \\1", ids)
+  idx <- match(colnames(spe), rownames(ws))
+  spe$cell_type <- factor(ids[idx]) #salvo le annotazioni (peso di maggioranza)
+  print(table(spe$cell_type))
+  
+  return(spe)
+}
+```
+
+Color vector and cell types
+```{r}
+# color_vector <- c(
+#     "Endothelial" = "#0072B2",       # blu vivo
+#     "FAPs" = "#009E73",              # verde vivo
+#     "Immune_Cells" = "#D55E00",      # arancione-rosso
+#     "MuSC" = "#E69F00",              # arancione
+#     "Myonuclei_IIb" = "#CC79A7",     # magenta
+#     "Myonuclei_IIx" = "#56B4E9",     # azzurro chiaro
+#     "Myonuclei_IIx_IIa" = "#F0E442", # giallo
+#     "Myonuclei_IIx_IIb" = "#9B59B6", # viola chiaro
+#     "Myonuclei_MTJ" = "#0099B4",     # turchese
+#     "Myonuclei_NMJ" = "#DDAA33",     # senape
+#     "Myonuclei_Trim63" = "#CC3311",  # rosso scuro
+#     "Nervous_System" = "#44AA99",    # verde acqua
+#     "Pericyte" = "#AA4499",          # viola/rosa
+#     "Smooth_Muscular" = "#332288",   # blu-viola scuro
+#     "Tenocyte" = "#A3E635"           # verde lime
+# )
+# 
+# cell_types <- c(
+#   "Endothelial", "FAPs", "Immune_Cells", "MuSC",
+#   "Myonuclei_IIb", "Myonuclei_IIx", "Myonuclei_IIx_IIa", "Myonuclei_IIx_IIb",
+#   "Myonuclei_MTJ", "Myonuclei_NMJ", "Myonuclei_Trim63", "Nervous_System",
+#   "Pericyte", "Smooth_Muscular", "Tenocyte"
+# )
+# save(color_vector, file = paste0(Rd_path, "color_cell_dec.RData"))
+# save(cell_types, file = paste0(Rd_path, "cell_types.RData"))
+```
+
+Load color vector and cell types names vector
+```{r}
+
+
+load(paste0(Rd_path, "cell_types.RData"))
+```
+
+
+```{r rctd_plot}
+plot_rctd <- function(spe, sample, color_vector, cell_types, save_plot = FALSE)
+{
+  
+  # Rappresentazione di tutti i tipi cellulari
+  p <- lapply(cell_types, \(.) 
+    plotCoords(spe, annotate = ., point_size = 0.1)
+  ) |>
+    wrap_plots(nrow = 3, ncol=5, guides = "collect") & 
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      strip.text = element_text(size = 5) 
+    ) & 
+    scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+  ggsave(paste0(sample, "_types.png"), p, width = 10, height = 8, dpi = 300)
+    # Salvataggio grafico
+  if (save_plot == TRUE)
+    ggsave(paste0(pl_path, sample, "_dec.png"), stat1, 
+           width = 10, height = 8, dpi = 300)
+    return(stat1)
+
+  return(stat1)
+}
+```
+
+Apply the Rctd algorithm
+
+```{r}
+for (sample in samples_key[c(22:24)]) {
+    spe_list[[sample]] <- run_my_rctd(spe_list[[sample]], sce_ref)
+}
+
+# spe_list[[-c(1:3)]] <- lapply(samples_key[-c(1:3)], function(sample) run_my_rctd(spe_list[[sample]], sce_ref))
+```
+
+Si blocca ai campioni del blocco7 - vado avanti senza per il momento
+
+Error in getInitialGeneList(spatial_counts, cell_type_info, MIN_OBS) : 
+  getInitialGeneList: At least 90% of genes do not match between the SpatialRNA and Reference objects. Please examine this. If this is intended, please remove the missing genes from the Reference object.
+
+```{r}
+# table(rownames(spe_list$blocco7_c26) == rownames(sce_ref))
+# spe_list$blocco7_c26 <- run_my_rctd(spe_list$blocco7_c26, sce_ref)
+```
+
+
+### Results
+
+```{r}
+lapply(spe_list_wb7, function(spe) print(table(colData(spe)$cell_type)))
+```
+
+
+#### Plots
+
+Visualizzazione delle annotazioni sui tessuti, prima tutti i nuclei e relative
+annotazioni e sotto solo i nuclei annotati, rimuovendo gli NA
+```{r rctd_plot}
+
+plots <- imap(spe_list_wb7, ~ {
+  plotCoords(.x, annotate = "cell_type",
+             point_size = 0.5,
+             x_coord = "x", y_coord = "y") +
+    scale_color_manual(values = color_vector) +
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines")
+    ) +
+    ggtitle(.y)
+})
+
+
+imap(plots, function(plot, name){
+  ggsave(paste0(pl_path, name, "_annot.png"), plot = plot, dpi = 700)
+})
+```
+
+
+
+```{r}
+plots <- imap(spe_list_wb7, function(spe, nm) {
+  # Determine where the annotation lives and subset accordingly
+    keep <- !is.na(spe$cell_type)
+    if (!any(keep)) return(NULL)
+    p <- spe[, keep] |> 
+      plotCoords(annotate = "cell_type",
+                    point_size = 0.5, x_coord = "x", y_coord = "y") + 
+      scale_color_manual(values = color_vector) +
+      theme(legend.key.width  = unit(0.1, "lines"),
+            legend.key.height = unit(1, "lines")
+            ) + 
+      ggtitle(nm)
+})
+
+imap(plots, function(plot, name){
+  ggsave(paste0(pl_path, name, "_ann.png"), plot = plot, dpi = 700)
+})
+```
+
+#### Barplot
+
+```{r}
+
+load(paste0(Rd_path, "spe_list_nuclei_dec.RData"))
+
+# Costruisci un data frame con tutte le proporzioni per ogni oggetto
+prop_df <- imap_dfr(spe_list_wb7, function(spe, name) {
+  tab <- table(spe$cell_type)
+  prop <- prop.table(tab)
+  tibble(
+    sample_id = name,
+    cell_type = names(prop),
+    proportion = as.numeric(prop)
+  )
+})
+
+# orizzontale bars
+ggplot(prop_df, aes(x = sample_id, y = proportion, fill = cell_type)) +
+  geom_col() +
+  coord_flip() +
+  scale_x_discrete(name = "Sample") +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_manual(values = color_vector) +
+  theme_minimal()
+
+ggsave(paste0(pl_path, "cell_type_proportions_oriz.png"), width = 10, height = 6, dpi = 300)
+
+# vertical bars
+ggplot(prop_df, aes(x = sample_id, y = proportion, fill = cell_type)) +
+  geom_col() +                             # geom_col uses the y value directly (identity)
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_manual(values = color_vector) +# use your named color_vector; otherwise use scale_fill_brewer()
+  labs(x = "Sample", y = "Proportion", fill = "Cell type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave(paste0(pl_path, "cell_type_proportions_vert.png"), width = 10, height = 6, dpi = 300)
+
+```
+
+#### Barplot aggregato per condizione (SENZA BLOCCO 7)
+
+```{r}
+prop_df_condition <- lapply(spe_list_wb7, function(spe) {
+  data.frame(
+    tissue_type = unique(spe$tissue_type),
+    cell_type = spe$cell_type
+  )
+}) |> bind_rows() |> filter(!is.na(cell_type))
+
+prop_df_condition <- imap_dfr(spe_list_wb7, function(spe, name) {
+  tibble(
+    tissue_type = unique(spe$tissue_type),
+    cell_type = spe$cell_type
+  ) |> 
+    filter(!is.na(cell_type))
+}) |> 
+  count(tissue_type, cell_type) |>
+  group_by(tissue_type) |>
+  mutate(proportion = n / sum(n)) |>
+  ungroup()
+
+ggplot(prop_df_condition, aes(x = tissue_type, y = proportion, fill = cell_type)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = color_vector) +
+  theme_minimal() +
+  labs(
+    title = "Proporzioni dei tipi cellulari per condizione",
+    x = "Condizione (tissue_type)",
+    y = "Proporzione",
+    fill = "Tipo Cellulare"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(paste0(pl_path, "cell_type_proportions_by_condition.png"), width = 10, height = 6, dpi = 300)
+```
+
+
+
+# Confronto con risultati multiome murino
+
+```{r}
+
+sce_ref #intanto guarda com'è l'oggetto
+table(colData(sce_ref)$condition)
+
+prop_df_condition <- 
+  data.frame(
+    tissue_type = colData(sce_ref)$condition,
+    cell_type =  colData(sce_ref)$subclusters
+  ) |>
+  count(tissue_type, cell_type) |>
+  group_by(tissue_type) |>
+  mutate(proportion = n / sum(n)) |>
+  ungroup()
+
+ggplot(prop_df_condition, aes(x = tissue_type, y = proportion, fill = cell_type)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = color_vector) +
+  theme_minimal() +
+  labs(
+    title = "Proporzioni dei tipi cellulari per condizione",
+    x = "Condizione (tissue_type)",
+    y = "Proporzione",
+    fill = "Tipo Cellulare"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(paste0(pl_path, "cell_type_multiome.png"), width = 10, height = 6, dpi = 300)
+```
+
+
+
+## Tabelle proporzioni
+
+```{r}
+#per campione
+celltype_table <- imap_dfr(spe_list_wb7, function(spe, name) {
+  as.data.frame(colData(spe)) |> 
+    filter(!is.na(cell_type)) |>             # drop NA cell_type rows
+    count(cell_type, name = "count")  |>      # tally per cell type
+    mutate(proportion = count / sum(count),
+           sample = name)                    # use imap name as sample id
+})
+
+celltype_matrix <- celltype_table |>
+  select(sample, cell_type, proportion) |>
+  pivot_wider(names_from = cell_type, values_from = proportion, values_fill = 0)
+
+celltype_matrix
+
+write_xlsx(celltype_matrix, paste0(res_path, "celltype_proportions_per_sample.xlsx"))
+```
+
+
+```{r}
+#per tipo di campione (SENZA B7) ----------------------------------------------------
+props_wide <- imap_dfr(spe_list_wb7, function(spe, name) {
+  tibble(
+    tissue_type = rep(as.character(unique(spe$tissue_type)),
+                      length.out = length(spe$cell_type)),
+    cell_type   = as.character(spe$cell_type)
+  )
+}) |>
+  count(tissue_type, cell_type, name = "n") |>
+  group_by(tissue_type) |>
+  mutate(prop = n / sum(n)) |>
+  ungroup() |>
+  select(tissue_type, cell_type, prop) |>
+  pivot_wider(names_from = cell_type, values_from = prop, values_fill = 0)
+
+write_xlsx(props_wide, path = paste0(res_path, "celltype_by_tissue_type.xlsx"))
+
+```
+
+# boxplot cell type proportions stratified by condition (SENZA BLOCCO7)
+```{r}
+prop_per_sample <- imap_dfr(spe_list_wb7, function(spe, name) {
+  cd <- as.data.frame(SummarizedExperiment::colData(spe))
+  
+  cd %>%
+    filter(!is.na(cell_type)) %>%
+    count(cell_type, name = "count") %>%
+    mutate(proportion  = count / sum(count),
+           sample      = name,
+           tissue_type = paste(unique(as.character(cd$tissue_type)), collapse = ", "))
+}) |> tibble()
+
+ggplot(prop_per_sample, aes(x = tissue_type, y = proportion, fill = tissue_type)) +
+  geom_boxplot(outlier.shape = 21) +
+  facet_wrap(~ cell_type, scales = "free_y") +
+  scale_fill_manual(values = c("sham" = "#1b9e77", "c26" = "#d95f02")) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Distribuzione proporzioni cell_type per tissue_type",
+       x = "Tissue type",
+       y = "Proporzione")
+
+ggsave(paste0(pl_path, "boxplot_celltype_prop_by_cond.png"), width = 10, height = 6, dpi = 300)
+```
+
+#Spatial relationship between trim and 2b myo
+#questo in realtà bisognerebbe vederlo sulla segmentazione
+```{r}
+
+default_color <- "white"
+
+your_color_vector <- setNames(
+  rep(default_color, 16),
+  c("Endothelial", "FAPs", "Immune_Cells", "MuSC", "Myonuclei_IIx",
+    "Myonuclei_IIx_IIa", "Myonuclei_IIx_IIb", "Myonuclei_MTJ",
+    "Myonuclei_NMJ", "Nervous_System", "Pericyte",
+    "Smooth_Muscular", "Tenocyte",
+    "Myonuclei_IIb", "Myonuclei_Trim63")
+)
+
+your_color_vector["Myonuclei_IIb"]     <- "blue"
+your_color_vector["Myonuclei_Trim63"]  <- "red"
+
+plot_list <- imap(spe_list_wb7, function(spe, nm) {
+  plotCoords(spe, annotate = "cell_type", point_size = 0.5) +
+    scale_color_manual(values = your_color_vector, na.value = default_color) +
+    ggtitle(nm) +   # <- titolo con il nome del campione
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(hjust = 0.5)  # per centrare il titolo
+    )
+})
+
+
+plots <- imap(spe_list_wb7, function(spe, nm) {
+  # Determine where the annotation lives and subset accordingly
+    keep <- spe$cell_type %in% c("Myonuclei_IIb", "Myonuclei_Trim63")
+    if (!any(keep)) return(NULL)
+    p <- spe[, keep] |> 
+      plotCoords(annotate = "cell_type", point_size = 0.5) +
+      scale_color_manual(values = your_color_vector) +
+      ggtitle(nm) +   # <- titolo con il nome del campione
+      theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(hjust = 0.5)  # per centrare il titolo
+      )
+})
+
+imap(plots, function(plot, name){
+  ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+})
+```

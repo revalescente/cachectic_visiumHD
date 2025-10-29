@@ -1,0 +1,104 @@
+---
+title: "annotazione_sr"
+output: html_document
+---
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(jsonlite)
+library(anndataR)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+# to read spatialdata objects
+library(ggnewscale)
+library(SpatialData)
+library(SingleCellExperiment)
+library(SingleR)
+library(BiocParallel)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+# Single R annotation of spaceranger segmentation results
+
+Paths
+```{r}
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/singler_annot/spaceranger/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_ann/spaceranger/"
+```
+
+Loading spatial experiment and single-cell reference and others
+```{r}
+load(paste0(Rd_path, "color_cell_dec.RData"))
+load(paste0(Rd_path, "spaceranger_b1_spe.RData"))
+(sce_ref <- readRDS(ref_path))
+```
+
+## Annotazione di tutti i campioni
+
+Aggiungo i logcounts nei campioni, utili per la rappresentazione più che altro
+```{r}
+sr_spe_list <- imap(sr_spe_list, \(spe, name){
+  spe <- scuttle::logNormCounts(spe)
+  spe})
+```
+
+
+Avvio per tutti i campioni con wilcoxon de.method e 10 geni de.n
+```{r}
+ann_list <- imap(sr_spe_list, function(spe, name){
+  pred.ann <- SingleR(test = spe, ref = sce_ref, de.method = "wilcox", labels = sce_ref$subclusters, BPPARAM=MulticoreParam(10))
+  pred.ann
+})
+
+save(ann_list, file = paste0(Rd_path,"annot_results_spaceranger_singleR_wilcox.RData"))
+```
+
+Riprovo anche con t-test
+```{r}
+ann_list_t <- imap(sr_spe_list, function(spe, name){
+  pred.ann <- SingleR(test = spe, ref = sce_ref, de.method = "t", labels = sce_ref$subclusters, BPPARAM=MulticoreParam(10))
+  pred.ann
+})
+
+save(ann_list_t, file = paste0(Rd_path,"annot_results_singleR_t_test.RData"))
+```
+
+Aggiunta informazioni labels in sr_spe_list_up, annotazioni wilcox e t-test
+```{r}
+load(paste0(Rd_path, 'sr_spe_list_nuclei_ann.RData'))
+load(paste0(Rd_path, "annot_results_singleR_t_test.RData"))
+
+lapply(ann_list, function(x) {base::table(x$labels)})
+sr_spe_list <- map2(sr_spe_list, ann_list, function(spe, ann) {
+  spe$labels_singler <- ann$labels
+  return(spe)
+})
+
+#lapply(sr_spe_list, function(x) {base::table(x$labels_singler)})
+#lapply(sr_spe_list, function(x) {base::table(x$labels_t_singler)})
+
+# save(sr_spe_list, file = paste0(Rd_path, "spaceranger_b1_spe.RData"))
+
+```
+
+Salvo le liste dei risultati di SingleR sia wilcox che t-test
+```{r}
+#extract info from each sample in the list
+
+labels_df <- imap_dfr(sr_spe_list, function(spe, name) {
+  data.table(
+    labels = spe$labels_singler,
+    sample_id = name, # Include the list element name
+    cell_id = spe$cell_id
+  )
+})
+
+# export labels as csv
+write.csv(labels_df, file = "/mnt/europa/valerio/data/data_tables/labels_singleR_spaceranger.csv", row.names = FALSE)
+write.csv(labels_df, file = "/mnt/europa/valerio/data/data_tables/labels_t_singleR.csv", row.names = FALSE)
+```

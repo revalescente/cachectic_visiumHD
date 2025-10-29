@@ -1,0 +1,298 @@
+---
+title: "nuclei_filtering"
+output: html_document
+---
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(ggnewscale)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+library(SingleR)
+library(dplyr)
+library(tidyr)
+library(SingleCellExperiment)
+library(SpaceTrooper)
+library(patchwork)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+Paths
+```{r}
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/filtered_nuclei/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/"
+```
+
+```{r}
+load(paste0(Rd_path, "spe_list_nuclei_ann.RData"))
+# save(spe_list_up, file = paste0(Rd_path, "spe_list_nuclei_ann.RData"))
+```
+
+Funzione per la creazione dei colData per il QC.
+Rimuove automaticamente le cellule con sum = 0 se rmZeros = TRUE
+
+```{r}
+vHD_spatialPerCellQC <- function(spe, micronConvFact=0.316, rmZeros=TRUE) {
+  
+  stopifnot(is(object=spe, "SpatialExperiment"))
+  spe <- addPerCellQC(spe)
+
+  if(!all(spatialCoordsNames(spe) %in% names(colData(spe)))) {
+    colData(spe) <- cbind.DataFrame(colData(spe), spatialCoords(spe))
+  }
+
+  spnc <- spatialCoords(spe) * micronConvFact
+  colnames(spnc) <-  paste0(spatialCoordsNames(spe), "_um")
+  colData(spe) <- cbind.DataFrame(colData(spe), spnc)
+  spe$Area_um <- spe$area * (micronConvFact^2)
+  spe$AspectRatio <- spe$major_axis_length/spe$minor_axis_length
+  if ("AspectRatio" %in% colnames(colData(spe))) {
+    spe$log2AspectRatio <- log2(spe$AspectRatio) # not cosmx
+  } else { warning("Missing aspect ratio in colData") }
+  
+  spe$CountArea <- spe$sum/spe$Area_um
+  spe$log2CountArea <- log2(spe$CountArea)
+  if (rmZeros) {
+    if (sum(spe$sum==0) > 0) {
+      message("Removing ", dim(spe[,spe$sum==0])[2],
+              " cells with 0 counts!")
+      spe <- spe[,!spe$sum==0]
+    }
+  }
+  return(spe)
+}
+```
+
+
+# Single sample analysis
+
+```{r}
+colData(spe_list_up$blocco1_c26STAT3)
+
+spe_prova <- spe_list_up$blocco3_c26murf1
+spe_prova <-  vHD_spatialPerCellQC(spe_prova)
+```
+
+Plots of QC metrics
+
+```{r}
+plotMetricHist(spe_prova, metric="sum") # total counts
+plotMetricHist(spe_prova, metric="Area_um", bins = 50) # area nuclei in micron
+plotMetricHist(spe_prova, metric="area", bins = 50) # are non in micron
+plotMetricHist(spe_prova, metric="CountArea", bins = 50) # rapporto sum/area_um
+plotMetricHist(spe_prova, metric="log2CountArea", bins = 50) # log2
+plotMetricHist(spe_prova, metric="AspectRatio", bins = 50) # major axis length / minor axis length
+```
+
+
+Identify spatial outliers based on cell area (Area_um) and log2CountArea 
+
+```{r}
+
+spe_prova <- computeSpatialOutlier(spe_prova, computeBy="Area_um", method="mc")
+spe_prova <- computeSpatialOutlier(spe_prova, computeBy="log2CountArea", method="mc")
+#spe_prova <- computeSpatialOutlier(spe_prova, computeBy="log2AspectRatio", method="mc")
+#spe_prova <- computeSpatialOutlier(spe_prova, computeBy="sum", method="mc")
+
+names(colData(spe_prova))
+base::table(Area_um = spe_prova$Area_um_outlier_mc)
+base::table(CountArea = spe_prova$log2CountArea_outlier_mc)
+base::table(spe_prova$log2AspectRatio_outlier_mc)
+base::table(Area_outlier = spe_prova$Area_um_outlier_mc, log2countArea_outlier = spe_prova$log2CountArea_outlier_mc,
+            log2AR = spe_prova$log2AspectRatio_outlier_mc)
+```
+
+To retrieve the thresholds (in the attr of the coldata column)
+
+```{r}
+attr(spe_prova$log2CountArea_outlier_mc, "thresholds")
+```
+
+```{r}
+plotMetricHist(spe_prova, metric="Area_um", useFences="Area_um_outlier_mc")
+#plotMetricHist(spe_prova, metric="sum", useFences="sum_outlier_mc")
+plotMetricHist(spe_prova, metric="log2CountArea", useFences="log2CountArea_outlier_mc")
+plotMetricHist(spe_prova, metric="CountArea")
+```
+
+Rimuovo le cellule con aree grandi (HIGH = 632) e con rapporto tra conteggio e area basso (344)
+ma prima visualizziamo meglio questi nuclei prima di rimuoverli
+
+```{r}
+plotCentroids(spe_prova, colourBy = "Area_um_outlier_mc")
+plotCentroids(spe_prova, colourBy = "log2CountArea_outlier_mc")
+```
+
+I nuclei con basso log2CountArea sono per lo più esterni, quindi rimuovo senza problemi, mentre i nuclei troppo grandi sembrano sparsi abbastanza casualmente nel tessuto. rimuovo anche questi. 
+
+```{r}
+table(spe_prova$log2CountArea_outlier_mc == "LOW")
+table(spe_prova$Area_um_outlier_mc == "HIGH")
+table(spe_prova$Area_um_outlier_mc == "HIGH" | spe_prova$log2CountArea_outlier_mc == "LOW")
+spe_prova <- spe_prova[, !(spe_prova$Area_um_outlier_mc == "HIGH" | spe_prova$log2CountArea_outlier_mc == "LOW")]
+
+```
+
+
+Cell type dopo aver eliminato gli outliers
+
+```{r}
+plotCoords(spe_prova, annotate = "labels_singler",
+             point_size = 0.05,
+             x_coord = "x_um", y_coord = "y_um") +
+    scale_color_manual(values = color_vector) +
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines")
+    )
+```
+
+```{r}
+plotCoords(spe_prova, annotate = "labels_singler", point_size = 0.05)
+```
+
+--------------------------------------------------------------------------------
+# All samples analysis 
+
+Calculate QC metrics for every sample and put in the colData and the coordinate in micron instead of pixels
+```{r}
+spe_list_up <- imap(spe_list_up, \(spe, name) {vHD_spatialPerCellQC(spe)})
+```
+
+Plot and save most important metrics
+
+```{r}
+metric_to_plot = "Area_um"
+plots <- imap(spe_list_up, \(spe, name){
+  p <- plotMetricHist(spe, metric=metric_to_plot, bins = 50) +
+          ggtitle(paste0(name))
+  p
+})
+
+p1 <- wrap_plots(plots[c(1:12)], ncol = 4) + 
+  plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt1'))
+p2 <- wrap_plots(plots[c(13:24)], ncol = 4) + 
+  plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt2'))
+
+ggsave(paste0(pl_path,"metrics/", metric_to_plot, "_part1.png"), plot = p1, dpi = 300, units = "cm", width = 50, height = 30)
+ggsave(paste0(pl_path,"metrics/", metric_to_plot, "_part2.png"), plot = p2, dpi = 300, units = "cm", width = 50, height = 30)
+```
+
+```{r}
+# plots <- plot_metrics(spe_list_up, metric_to_plot = "sum", save = TRUE, bin = 50)
+# non funziona ma non ho voglia di farla andare
+```
+
+I'll look only at the area of nuclei and the ratio between counts and area of the nuclei
+Because there is only one sample that has log2CountArea asymmetric enough, I'll use sc method to determine the outliers in that metric
+
+```{r}
+spe_list_up <- imap(spe_list_up, \(spe, name){
+  spe <- computeSpatialOutlier(spe, computeBy="Area_um", method="mc") # "mc" for asymmetric distribution of the choosen metric
+  spe <- computeSpatialOutlier(spe, computeBy="log2CountArea", method="sc") # "sc" for symmetric distribution of the choosen metric
+  spe
+})
+```
+
+```{r}
+base::table(spe_list_up$blocco1_c26STAT3$Area_um_outlier_mc)
+base::table(spe_list_up$blocco1_c26STAT3$log2CountArea_outlier_sc)
+```
+
+```{r}
+outlier_summary_df <- imap_dfr(spe_list_up, \(spe, name) {
+  
+  colData(spe) |>
+    as.data.frame() |>
+    select(Area_um_outlier_mc, log2CountArea_outlier_sc) |>
+    
+    # --- THE FIX IS HERE ---
+    # Convert both columns to character to remove the special class
+    mutate(across(everything(), as.character)) |>
+    
+    # Now pivot_longer will work correctly
+    pivot_longer(
+      cols = everything(),
+      names_to = "metric",
+      values_to = "outlier_type"
+    ) |>
+    
+    count(metric, outlier_type, name = "count") |>
+    
+    mutate(sample = name)
+})
+
+```
+
+```{r}
+outlier_summary_df |> 
+  filter(
+    metric == "Area_um_outlier_mc" & outlier_type == "HIGH"
+  )
+
+
+outlier_summary_df |> 
+  filter(
+    metric == "log2CountArea_outlier_sc" & outlier_type == "LOW"
+  )
+
+```
+
+Plot and save most important metrics with the outliers thresholds
+
+```{r}
+metric_to_plot = "Area_um"
+plots <- imap(spe_list_up, \(spe, name){
+  p <- plotMetricHist(spe, metric=metric_to_plot, bins = 50, useFences= paste0(metric_to_plot,"_outlier_mc")) +
+          labs(color="Fences outlier") +
+          ggtitle(name)
+  p
+})
+
+p1 <- wrap_plots(plots[c(1:12)], ncol = 4) + 
+  plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt1'))
+p2 <- wrap_plots(plots[c(13:24)], ncol = 4) + 
+  plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt2'))
+
+ggsave(paste0(pl_path,"outliers/", metric_to_plot, "_part1.png"), plot = p1, dpi = 300, units = "cm", width = 50, height = 30)
+ggsave(paste0(pl_path,"outliers/", metric_to_plot, "_part2.png"), plot = p2, dpi = 300, units = "cm", width = 50, height = 30)
+```
+
+Plots of the nuclei centroids colored by outliers info
+
+```{r}
+
+# "Area_um_outlier_mc"
+# "log2CountArea_outlier_sc"
+
+
+metric_to_plot = "Area_um_outlier_mc"
+plots <- imap(spe_list_up, \(spe, name){
+  p <- plotCentroids(spe, colourBy = metric_to_plot, size = 0.05) +
+          ggtitle(name)
+  p
+})
+
+# p1 <- wrap_plots(plots[c(1:12)], ncol = 4) + 
+#   plot_annotation(title = paste0('Nuclei outliers - ', metric_to_plot))
+# p2 <- wrap_plots(plots[c(13:24)], ncol = 4) + 
+#   plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt2'))
+# 
+# ggsave(paste0(pl_path,"area_outlier/", metric_to_plot, "_part1.png"), plot = p1, dpi = 300, units = "cm", width = 50, height = 30)
+# ggsave(paste0(pl_path,"area_outlier/", metric_to_plot, "_part2.png"), plot = p2, dpi = 300, units = "cm", width = 50, height = 30)
+
+iwalk(plots, function(plot, name){
+ # ggsave(paste0(pl_path,"CountArea_outlier/", name, ".png"), plot = plot, dpi = 300, units = "cm", width = 50, height = 30)
+  ggsave(paste0(pl_path,"area_outlier/", name, ".png"), plot = plot, dpi = 300, units = "cm", width = 50, height = 30)
+})
+```
+
+
+
+
+

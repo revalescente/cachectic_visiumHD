@@ -10,24 +10,32 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r library, message=FALSE, warning=FALSE, include=FALSE}
-library(ggplot2)
 library(jsonlite)
 library(anndataR)
-library(SummarizedExperiment)
 library(scuttle)
+library(SpatialExperiment)
 # to read spatialdata objects
 library(ggnewscale)
 library(SpatialData)
 library(SingleCellExperiment)
+library(purrr)
+library(dplyr)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+Paths
+```{r}
+#pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/cell_dec/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+#ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+#res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/DEC_ANN/"
 ```
 
 # Concatenated samples
 
-Al momento non è disponibile un file concatenato perché non riesco a farlo funzionare in python. Si può fare da R molto più 
-tranquillamente.
+Al momento non è disponibile un file concatenato perché non riesco a farlo funzionare in python. Si può fare da R molto più tranquillamente.
 ```{r concat_data}
 #(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
-
 ```
 
 # List of all samples
@@ -64,21 +72,26 @@ spe_list = read_samples_list(samples_key)
 spe_list
 ```
 
+# ------------------------------------------------------------------------------
 
-#-----------------------------------------------------------------------------
+## Preparation of the different objects
 
-# Manual blasfemy
-Nothing is working so I'll read data as single samples SingleCellExperiment
-load spatial coordinates as csv and then build the objects I need manually.
-
-(now is working - i need not only spatialdata to read spatialdata but also sce library)
+## Single Cell Experiment
 
 ```{r}
-read_samples_adatas <- function(samples)
+read_samples_adatas <- function(samples, data_path = "/mnt/europa/valerio/data/zarr_store/adatas/samples_adata/")
 {
   sce_list <- lapply(samples, function(sample) {
-    h5ad_path <- paste0("/mnt/europa/valerio/data/zarr_store/adatas/", sample, ".h5ad")
+    h5ad_path <- paste0(data_path, sample, ".h5ad")
     sce <- read_h5ad(h5ad_path, to = "SingleCellExperiment")
+    blocco <- strsplit(sample, "_")[[1]][1]
+    sampletype <- strsplit(sample, "_")[[1]][2]
+    sce$blocco <- blocco
+    sce$sampletype <- sampletype
+    sce$ncounts <- colSums(assay(sce))
+    sce$ngenes <- Matrix::colSums(assay(sce) > 0)
+    sce$sample_id <- sample
+    sce
   })
   names(sce_list) = samples
   return(sce_list)
@@ -90,26 +103,17 @@ sce_list = read_samples_adatas(samples_key)
 #sce_list
 ```
 
-# Preparation of the different objects
-
-## Single Cell Experiment
-Adding some useful information to the colData and filtering low genes/counts nuclei
-
+Filtering low count nuclei
 ```{r}
 
-for(nm in names(sce_list)) {
-  blocco <- strsplit(nm, "_")[[1]][1]
-  sampletype <- strsplit(nm, "_")[[1]][2]
-  colData(sce_list[[nm]])$blocco <- blocco
-  colData(sce_list[[nm]])$sampletype <- sampletype
-  colData(sce_list[[nm]])$ncounts <- colSums(assay(sce_list[[nm]]))
-  colData(sce_list[[nm]])$ngenes <- Matrix::colSums(assay(sce_list[[nm]]) > 0)
-  sce_list[[nm]] <- sce_list[[nm]][, colData(sce_list[[nm]])$ncounts >= quantile(colData(sce_list[[nm]])$ncounts, 0.05) &
-                       colData(sce_list[[nm]])$ngenes >= quantile(colData(sce_list[[nm]])$ngenes, 0.05)]
-}
+# for(nm in names(sce_list)) {
+#   sce_list[[nm]] <- sce_list[[nm]][, colData(sce_list[[nm]])$ncounts >= quantile(colData(sce_list[[nm]])$ncounts, 0.05) &
+#                        colData(sce_list[[nm]])$ngenes >= quantile(colData(sce_list[[nm]])$ngenes, 0.05)]
+# }
 ```
 
 ## Single sce object
+
 ```{r}
 sce_merged <- do.call(cbind, sce_list)
 sce_merged
@@ -126,22 +130,301 @@ dim(sce_merged)
 ## Pseudobulk
 
 ```{r}
-pb_list <- lapply(sce_list, function(sce) {
-  aggregateAcrossCells(sce, ids = colData(sce)$sampletype, use.assay.type = "X")
+sce2pb <- \(sce_list) 
+{
+  pb_list <- lapply(sce_list, function(sce) {
+  scuttle::aggregateAcrossCells(sce, ids = colData(sce)$tissue_type, use.assay.type = "X")
+  })
+  all_counts <- do.call(cbind, lapply(pb_list, assay))
+  all_colData <- do.call(rbind, lapply(pb_list, colData))
+  final <- SingleCellExperiment(assays=list(counts=all_counts), colData=all_colData)
+  return(final)
+}
+```
+
+```{r}
+pb <- sce2pb(sce_list)
+```
+
+## Spatial data
+
+Aggiungo spatial coordinates ai sce
+
+```{r}
+spatialc <- read.csv("/mnt/europa/valerio/data/data_tables/spatial_coords.csv", sep=",", header = FALSE)
+colnames(spatialc) <- c("y", "x")
+spatialc$sample_id <- sce_merged$sample_id
+head(spatialc)
+dim(spatialc)
+dim(sce_merged)
+dim(spatialc)[1] == dim(sce_merged)[2]
+```
+
+### Spatial experiment merged
+```{r}
+sce_merged$x <- spatialc$x
+sce_merged$y <- spatialc$y
+(spe_merged <- toSpatialExperiment(sce_merged,
+    spatialCoordsNames = c("y", "x")))
+```
+
+### Spatial experiment list
+
+```{r}
+add_spatial_coords <- function(sce_list, spatial_coords, sample_col = "sample_id") {
+  lapply(sce_list, function(sce) {
+    # Identify the sample id for this SCE
+    sample_id <- unique(colData(sce)[[sample_col]])
+    # Subset spatialc for this sample
+    spatial_sub <- spatial_coords[spatial_coords[[sample_col]] == sample_id, ]
+    # Add x and y to colData
+    colData(sce)$x <- spatial_sub$x
+    colData(sce)$y <- spatial_sub$y
+    return(sce)
+  })
+}
+```
+
+Let's add spatial coordinates to every element of sce_list
+```{r}
+sce_list <- add_spatial_coords(sce_list, spatialc, sample_col = "sample_id")
+sapply(sce_list, function(sce) all(c("x", "y") %in% colnames(colData(sce))))
+```
+
+Convert to spe
+```{r}
+spe_list <- lapply(sce_list, function(sce) {
+  toSpatialExperiment(sce, spatialCoordsNames = c("y", "x"))
 })
-# Combine
-all_counts <- do.call(cbind, lapply(pb_list, assay))
-all_colData <- do.call(rbind, lapply(pb_list, colData))
-pb <- SingleCellExperiment(assays=list(counts=all_counts), colData=all_colData)
+```
+
+### Filtro nuclei
+```{r}
+
+```
+
+
+## Spe grouped by sampletypes
+
+```{r}
+# Get the unique sample types
+sampletypes <- unique(spe_merged$sampletype)
+
+# Create a list with one SpatialExperiment per sample type
+spe_st <- lapply(sampletypes, function(st) {
+  spe_merged[, colData(spe_merged)$sampletype == st]
+})
+
+# Optionally, name the list
+names(spe_st) <- sampletypes
+```
+
+# spe_merged without blocco7
+
+Devo togliere b7 e aggiungere il vettore cell_type e tissue_type agli spe_merged e poi ricreare lo pseudo bulk. Inoltre anche in_tissue così i grafici non stressano
+
+```{r}
+# 1) Costruisci la tabella mapping da spe_list
+mapping_df <- imap_dfr(spe_list_wb7, function(spe, name) {
+  cd <- as.data.frame(colData(spe))
+  # assicurati che le colonne esistano e siano character (evita factor surprises)
+  if (!("cell_id" %in% names(cd))) stop("In spe_list[['", name, "']] manca la colonna 'cell_id'")
+  if (!("cell_type" %in% names(cd))) stop("In spe_list[['", name, "']] manca la colonna 'cell_type'")
+
+  tibble(
+    sample_id = name,
+    cell_id   = as.character(cd$cell_id),
+    cell_type = as.character(cd$cell_type)
+  )
+})
+
+# 2) Controlli rapidi: duplicati o mismatch
+dups <- mapping_df |> 
+  count(sample_id, cell_id)  |> 
+  filter(n > 1)
+
+if (nrow(dups) > 0) {
+  stop("Trovati duplicati in mapping_df per sample_id+cell_id: controlla i seguenti (esempi):\n",
+       paste(utils::head(paste0(dups$sample_id, "/", dups$cell_id), 10), collapse = ", "))
+}
+
+# 3) Prepara il colData di spe_merged come data.frame
+
+# 4) Left join per ottenere cell_type allineato all'ordine di spe_merged
+cd_joined <- as.data.frame(colData(spe_merged))  |> 
+  mutate(sample_id = as.character(sample_id),
+         cell_id   = as.character(cell_id)) |> 
+  left_join(mapping_df, by = c("sample_id", "cell_id"))
+
+# 5) Verifiche: tutte le righe hanno un valore corrispondente?
+missing_n <- sum(is.na(cd_joined$cell_type))
+if (missing_n > 0) {
+  warning(sprintf("Attenzione: %d colonne in spe_merged non hanno corrispondenza in mapping_df (cell_type NA).",
+                  missing_n))
+  # se vuoi fermare in caso di mismatch, usa stop() invece di warning()
+}
+
+# 6) Assegna in un'unica operazione al colData
+colData(spe_merged)$cell_type <- cd_joined$cell_type
+
+# 7) (Opzionale) converti in factor con livelli coerenti se vuoi
+all_levels <- unique(na.omit(mapping_df$cell_type))
+colData(spe_merged)$cell_type <- factor(colData(spe_merged)$cell_type, levels = all_levels)
+
+spe_merged$tissue_type <- spe_merged$sampletype
+spe_merged$sampletype <- NULL
+spe_merged$in_tissue <- TRUE
+spe_merged_wb7 <- spe_merged[, spe_merged$blocco %nin% "blocco7"]
+```
+
+# spe_list without blocco 7 and coldata corrected
+
+```{r}
+spe_list_wb7 <- spe_list[!startsWith(names(spe_list), "blocco7_")]
+```
+
+Cambio il nome della colonna sampletype in tissue_type, cosi siamo uguali a emma
+e aggiungo 
+```{r}
+spe_list_wb7 <- imap(spe_list_wb7, function(spe, name) {
+  spe$tissue_type = spe$sampletype
+  spe$sampletype = NULL
+  spe$in_tissue <-  TRUE
+  spe
+})
+```
+
+```{r}
+spe_list <- imap(spe_list, function(spe, name) {
+  spe$tissue_type = spe$sampletype
+  spe$sampletype = NULL
+  spe$in_tissue <-  TRUE
+  spe
+})
+```
+
+
+# Pseudobulk without blocco 7
+
+Creiamo oggetto pseudobulk per i vari cell_type
+```{r}
+# Create pseudo-bulk for each cell_type in each sample
+pb_ct_wb7 <- aggregateAcrossCells(spe_merged_wb7, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_wb7$cell_type,
+                                             sample = spe_merged_wb7$sample_id))
+pb_ct_wb7  <- logNormCounts(pb_ct_wb7,  assay.type = "X") #altre normalizzazioni?
+(colnames(pb_ct_wb7) <- paste(pb_ct_wb7$cell_type, pb_ct_wb7$sample_id, sep = "_"))
+```
+
+Rifaccio pseudobulk per tissue_type (aka sampletype) e tolgo blocco 7
+```{r}
+pb_tt_wb7 <- aggregateAcrossCells(spe_merged_wb7, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_wb7$tissue_type,
+                                             sample = spe_merged_wb7$sample_id))
+pb_tt_wb7  <- logNormCounts(pb_tt_wb7,  assay.type = "X") #altre normalizzazioni?
+(colnames(pb_tt_wb7) <- pb_tt_wb7$sample_id)
+```
+
+# rifaccio gli oggetti spe_merged e pb con l'annotazione SingleR
+
+```{r}
+load(paste0(Rd_path, 'spe_list_nuclei_ann.RData'))
+```
+
+## Spe merged
+```{r}
+spe_merged_sr <- do.call(cbind, spe_list_up)
+```
+
+without blocco 7
+```{r}
+spe_list_up_wb7 <- spe_list_up[!startsWith(names(spe_list_up), "blocco7_")]
+spe_merged_sr_wb7 <- do.call(cbind, spe_list_up_wb7)
+```
+
+## Pseudobulk SingleR
+
+Creiamo oggetto pseudobulk per i vari cell_type
+```{r}
+pb_ct <- aggregateAcrossCells(spe_merged_sr, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_sr$labels_singler,
+                                             sample = spe_merged_sr$sample_id))
+pb_ct  <- logNormCounts(pb_ct,  assay.type = "X") 
+colnames(pb_ct) <- paste(pb_ct$labels_singler, pb_ct$sample_id, sep = "_")
+```
+
+without blocco 7
+```{r}
+pb_ct_wb7 <- aggregateAcrossCells(spe_merged_sr_wb7, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_sr_wb7$labels_singler,
+                                             sample = spe_merged_sr_wb7$sample_id))
+pb_ct_wb7  <- logNormCounts(pb_ct_wb7,  assay.type = "X") 
+colnames(pb_ct_wb7) <- paste(pb_ct_wb7$labels_singler, pb_ct_wb7$sample_id, sep = "_")
+```
+
+# Spaceranger segmentation data reading 
+
+Select the first blocco
+```{r}
+(samples_b1 <- samples_key[startsWith(samples_key, "blocco1_")])
+```
+
+
+```{r reading_function, include=FALSE}
+read_samples_list <- function(samples)
+{
+  spe_list <- lapply(samples, function(sample) {
+    sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/spaceranger_v4/samples/", sample), anndataR=TRUE)
+    sdata
+  })
+  names(spe_list) = samples
+  return(spe_list)
+}
+```
+
+```{r samples_list}
+sr_list = read_samples_list(samples_b1)
+sr_list
+```
+
+
+Extract tables and create spatial experiment
+```{r}
+sr_spe_list <- imap(sr_list, function(sdata, name){
+  sce <-  sdata$tables$segmentation_counts
+  spe <- toSpatialExperiment(sce, spatialCoordsNames = c("x", "y"))
+  spe$in_tissue = TRUE
+  spe$intissue = NULL
+  # rename assay counts
+  assayNames(spe)[assayNames(spe) == "X"] <- "counts"
+  # filter nuclei with zero counts
+  spe <- spe[, colSums(counts(spe)) > 0]
+  spe
+})
+sr_spe_list
+
 ```
 
 
 # Saving objects
 
-Pseudobulk
 ```{r}
-# save(pb, file = "/mnt/europa/valerio/data/Rdata/pseudobulk_nuclei.RData")
-# save(sce_merged, file = "/mnt/europa/valerio/data/Rdata/sce_merged_nuclei.RData")
-# save(sce_list, file = "/mnt/europa/valerio/data/Rdata/sce_list_nuclei.RData")
+save(pb_tt_wb7, file = paste0(Rd_path, "pseudobulk_tissuetype_wb7.RData"))
+save(pb_ct_wb7, file = paste0(Rd_path, "pseudobulk_celltype_wb7.RData"))
+save(sce_list, file = paste0(Rd_path, "sce_list_nuclei.RData"))
+save(sce_merged, file = paste0(Rd_path, "sce_merged_nuclei.RData"))
+
+save(spe_list, file = paste0(Rd_path, "spe_list_nuclei.RData"))
+save(spe_list_wb7, file = paste0(Rd_path, "spe_list_nuclei_dec_wb7.RData"))
+save(spe_merged, file = paste0(Rd_path, "spe_merged_nuclei.RData"))
+save(spe_merged_wb7, file = paste0(Rd_path, "spe_merged_nuclei_wb7.RData"))
+# oggetti risalvati con annotazione singleR
+save(spe_merged_sr, file = paste0(Rd_path, "spe_merged_nuclei_sr.RData"))
+save(spe_merged_sr_wb7, file = paste0(Rd_path, "spe_merged_nuclei_sr_wb7.RData"))
+save(pb_ct, file = paste0(Rd_path, "pseudobulk_celltype_SingleR.RData"))
+save(pb_ct_wb7, file = paste0(Rd_path, "pseudobulk_celltype_SingleR_wb7.RData"))
+
+# spaceranger - blocco1
+save(sr_spe_list, file = paste0(Rd_path, "spaceranger_b1_spe.RData"))
 ```
 

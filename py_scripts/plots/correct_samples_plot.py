@@ -42,7 +42,21 @@ sdata.pl.render_images("blocco9_c26SMAD23_full_image", scale = "scale2"
 ).pl.render_shapes("blocco9_c26SMAD23_filtered_nuclei", outline=True, outline_alpha=1, outline_width=3, fill_alpha=0
 ).pl.show(ax = ax, coordinate_systems = "blocco9_c26SMAD23", save = "output_python/presentation/b9_c26SMAD23_result.png")
 
+# sranger
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+sdata2.pl.render_images("blocco1_nuclei_hires_tissue_image").pl.render_shapes("blocco1_nuclei_nuclei_boundaries", outline=True, outline_alpha=1, outline_width=3, fill_alpha=0
+).pl.show(ax = ax, coordinate_systems = "downscale_to_hires", save = "output_python/sranger/blocco1_secondo_nuclei.png")
 
+plt.figure(figsize=(50, 50))
+ax = plt.gca()
+sdata2.query.bounding_box(
+    axes=["x", "y"],
+    min_coordinate=[1000, 1000],
+    max_coordinate=[1500, 1500],
+    target_coordinate_system="downscale_to_hires",
+).pl.render_images("blocco1_nuclei_hires_tissue_image").pl.render_shapes("blocco1_nuclei_nuclei_boundaries", outline=True, outline_alpha=1, outline_width=3, fill_alpha=0
+).pl.show(ax = ax, coordinate_systems = "downscale_to_hires", save = "output_python/sranger/blocco1_secondo_nuclei_zoom.png")
 
 
 

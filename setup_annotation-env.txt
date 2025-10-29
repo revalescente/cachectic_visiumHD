@@ -1,0 +1,8 @@
+conda create --name annot-envs python=3.9
+conda activate annot-envs
+python --version
+# Python 3.9.19
+git clone https://github.com/portrai-io/CELLama.git 
+cd CELLama
+pip install -r requirements.txt
+pip install -e .
