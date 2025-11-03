@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(purrr)
 library(ggplot2)
 library(ggspavis)
+library(patchwork)
 library(jsonlite)
 library(anndataR)
 library(scuttle)
@@ -52,6 +53,15 @@ Select only blocco1 samples to compare with spaceranger
 spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), "blocco1")]
 ```
 
+Remove x and y column from colData otherwise plotCoords doesn't work
+```{r}
+spe_list_b1 <- map(spe_list_b1, \(spe){
+  spe$x = NULL
+  spe$y = NULL
+  spe
+})
+```
+
 
 ## Spatial plot of annotations
 
@@ -91,11 +101,64 @@ plots <- imap(spe_list_b1, function(spe, name) {
 })
 
 
-imap(plots, function(plot, name){
+iwalk(plots, function(plot, name){
   # ggsave(paste0(pl_path,"spat_annotation/", name, "_singler_annot.png"), plot = plot, dpi = 700)
   ggsave(paste0(pl_path,"spat_annotation/", name, "_b1_miei.png"), plot = plot, dpi = 700)
 })
 ```
+
+### Divided by cell type
+```{r}
+plot_grids <- imap(sr_spe_list, function(spe, spe_name) {
+  
+  # Inner loop to create a list of plots for each cell type
+  list_of_plots <- map(cell_types, function(type) {
+    
+    # --- YOUR FIX IMPLEMENTED ---
+    # 1. Create a local copy to be safe.
+    spe_local <- spe
+    
+    # 2. Programmatically create a new column named after the content of `type`.
+    # For example, if type is "Endothelial", this creates spe_local$Endothelial
+    spe_local$is_here <- spe_local$labels_singler == type
+    
+    # 3. Call plotCoords, using the `type` variable as the column name string.
+    p <- plotCoords(
+      spe_local,
+      x_coord = "x",
+      y_coord = "y",
+      annotate = "is_here", # This now correctly refers to the new column
+      point_size = 0.05
+    ) +
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80"), name = "Present") +
+      labs(title = type) # The subplot title is still the cell type name
+    
+    return(p)
+  })
+  
+  # --- The rest of your code is correct ---
+  
+  # Combine the list of plots into a single grid
+  final_grid <- wrap_plots(list_of_plots, nrow = 3, ncol = 5, guides = "collect") &
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(size = 8)
+    )
+  
+  # Add a main title for the entire grid
+  final_grid <- final_grid + plot_annotation(title = spe_name)
+  
+  return(final_grid)
+})
+
+
+iwalk(plot_grids, function(plot, name){
+  # ggsave(paste0(pl_path,"spat_annotation/by_type/", name, "_b1_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+  ggsave(paste0(pl_path,"spat_annotation/by_type/", name, "_singler_annot.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+```
+
 
 ## Barplot
 
@@ -361,11 +424,16 @@ props_wide <- imap_dfr(sr_spe_list, function(spe, name) {
 ## Heatmap 
 
 ```{r}
+load(paste0(Rd_path, "annot_results_singleR_wilcox.RData"))
+```
+
+
+```{r}
 plots <- imap(ann_list, function(ann_el, name) {plotScoreHeatmap(ann_el)})
 
 imap(plots, function(plot, name){
-  #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
-  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, ".png"), plot = plot, dpi = 700)
+  #ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, ".png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_mine.png"), plot = plot, dpi = 700)
 })
 
 ```

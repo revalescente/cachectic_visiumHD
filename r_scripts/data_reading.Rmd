@@ -406,6 +406,14 @@ sr_spe_list
 ```
 
 
+# Add labels of RCTD doublet into the spe_list_up where all info are stored togheter
+
+I need to add the column in the spe list but the blocco7 wasn't annotated so let's skip them. A for loop is more handly.
+
+```{r}
+spe_list_up<- mappingLabels(spe_list_up, ann_list_RCTD)
+```
+
 # Saving objects
 
 ```{r}
@@ -423,6 +431,9 @@ save(spe_merged_sr, file = paste0(Rd_path, "spe_merged_nuclei_sr.RData"))
 save(spe_merged_sr_wb7, file = paste0(Rd_path, "spe_merged_nuclei_sr_wb7.RData"))
 save(pb_ct, file = paste0(Rd_path, "pseudobulk_celltype_SingleR.RData"))
 save(pb_ct_wb7, file = paste0(Rd_path, "pseudobulk_celltype_SingleR_wb7.RData"))
+
+# oggetto aggiornato con tutto (3/11/25)
+save(spe_list_up, file = paste0(Rd_path, "spe_list_nuclei_ann.RData"))
 
 # spaceranger - blocco1
 save(sr_spe_list, file = paste0(Rd_path, "spaceranger_b1_spe.RData"))

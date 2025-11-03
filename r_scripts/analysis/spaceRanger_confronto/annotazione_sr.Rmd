@@ -86,7 +86,7 @@ sr_spe_list <- map2(sr_spe_list, ann_list, function(spe, ann) {
 
 ```
 
-Salvo le liste dei risultati di SingleR sia wilcox che t-test
+Salvo le liste dei risultati di SingleR s
 ```{r}
 #extract info from each sample in the list
 
@@ -100,5 +100,5 @@ labels_df <- imap_dfr(sr_spe_list, function(spe, name) {
 
 # export labels as csv
 write.csv(labels_df, file = "/mnt/europa/valerio/data/data_tables/labels_singleR_spaceranger.csv", row.names = FALSE)
-write.csv(labels_df, file = "/mnt/europa/valerio/data/data_tables/labels_t_singleR.csv", row.names = FALSE)
+#write.csv(labels_df, file = "/mnt/europa/valerio/data/data_tables/labels_t_singleR.csv", row.names = FALSE)
 ```

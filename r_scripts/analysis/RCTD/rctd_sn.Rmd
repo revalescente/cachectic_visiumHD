@@ -19,10 +19,12 @@ library(scDblFinder)
 library(SingleCellExperiment)
 library(SpatialExperiment)
 library(tidyr)
+library(forcats)
 library(spacexr)
 library(SpotSweeper)
 library(writexl)
 library(ggspavis)
+library(data.table)
 ```
 
 # Deconvolution
@@ -31,10 +33,10 @@ library(ggspavis)
 
 Paths
 ```{r}
-pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/cell_dec/"
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/RCTD_doublet/"
 Rd_path = "/mnt/europa/valerio/data/Rdata/"
 ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
-res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/DEC_ANN/"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/RCTD_doublet/"
 ```
 
 
@@ -51,37 +53,33 @@ sce_ref <- readRDS(ref_path)
 ## Robust Cell Type Decomposition (spacexr)
 
 ```{r rctd_function}
-run_my_rctd <- function(spe, sce_ref, seed = 123) 
-{
+run_my_rctd <- function(spe, sce_ref, seed = 123, max_cores = 4, rctd_mode = "doublet", cell_type_col = "subclusters") {
+  # --- 1. Setup and Deconvolution (as before) ---
   set.seed(seed)
-  # rownames(spe) <- rowData(spe)$Symbol
   rownames(spe) <- make.unique(rownames(spe))
-  # colnames(spe) <- as.character(seq_len(ncol(spe)))
-
   
-  # preparazione dataset
+  # Prepare RCTD dataset
   rctd_data <- createRctd(
     spatial_experiment = spe,
     reference_experiment = sce_ref,
-    cell_type_col = "subclusters"
+    cell_type_col = cell_type_col
   )
   
-  # deconvoluzione
-  results <- runRctd(rctd_data, rctd_mode = "doublet")
+  # Run deconvolution
+  results <- runRctd(rctd_data, rctd_mode = rctd_mode, max_cores = max_cores)
   
-  # Estrazione pesi
-  ws <- assay(results, "weights")
-  ws <- data.frame(t(as.matrix(ws)))
-  colData(spe)[names(ws)] <- ws[colnames(spe), ] #salvo tutti i pesi in spe
+  # --- 2. Extract Requested Columns from colData ---
+  cd <- colData(results)
   
-  # Assegna cluster
-  ids <- names(ws)[apply(ws, 1, which.max)]
-  ids <- gsub("\\.([A-z])", " \\1", ids)
-  idx <- match(colnames(spe), rownames(ws))
-  spe$cell_type <- factor(ids[idx]) #salvo le annotazioni (peso di maggioranza)
-  print(table(spe$cell_type))
-  
-  return(spe)
+  # Create the data.table by manually specifying each column.
+  dt <- data.table(
+    cell_id = rownames(cd),
+    spot_class = cd$spot_class,
+    first_type = cd$first_type,
+    second_type = cd$second_type
+  )
+  # --- 3. Return the data.table ---
+  return(dt)
 }
 ```
 
@@ -121,80 +119,114 @@ load(paste0(Rd_path, "color_cell_dec.RData"))
 load(paste0(Rd_path, "cell_types.RData"))
 ```
 
-
-```{r rctd_plot}
-plot_rctd <- function(spe, sample, color_vector, cell_types, save_plot = FALSE)
-{
-  
-  # Rappresentazione di tutti i tipi cellulari
-  p <- lapply(cell_types, \(.) 
-    plotCoords(spe, annotate = ., point_size = 0.1)
-  ) |>
-    wrap_plots(nrow = 3, ncol=5, guides = "collect") & 
-    theme(
-      legend.key.width = unit(0.5, "lines"),
-      legend.key.height = unit(1, "lines"),
-      strip.text = element_text(size = 5) 
-    ) & 
-    scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
-  ggsave(paste0(sample, "_types.png"), p, width = 10, height = 8, dpi = 300)
-    # Salvataggio grafico
-  if (save_plot == TRUE)
-    ggsave(paste0(pl_path, sample, "_dec.png"), stat1, 
-           width = 10, height = 8, dpi = 300)
-    return(stat1)
-
-  return(stat1)
-}
-```
-
-Apply the Rctd algorithm on one sample 
-
-```{r}
-spe_prova <- spe_list$blocco2_c26murf1
-spe_prova <- run_my_rctd(spe_prova, sce_ref)
-```
-
-I risultati
-```{r}
-table(colData(spe_prova)$cell_type)
-sum(is.na(spe_prova$cell_type))
-```
-
-```{r}
-base::table(spe_list_up$blocco2_c26murf1$labels_singler)
-base::table(spe_prova$cell_type)
-base::table(RCTD = spe_prova$cell_type, SingleR = spe_list_up$blocco2_c26murf1$labels_singler)
-```
-
 ## All samples RCTD annotation
 
+Run RCTD to all samples, the function return a dataframe with this three column:
+ - spot_class: singlet, doublet, etc
+ - first_type: of cell, primary cell type
+ - second_type: second best guess
+ 
+I removed blocco7 because after the filtering has too little genes in common with the reference
+
 ```{r}
-spe_list <- imap(spe_list, \(spe, name){
+spe_list_wb7 <- spe_list[!startsWith(names(spe_list), "blocco7")]
+ann_list_RCTD <- imap(spe_list_wb7, \(spe, name){
   print(name)
-  spe <- run_my_rctd(spe, sce_ref)
-  spe
+  df <- run_my_rctd(spe, sce_ref, max_cores = 12, rctd_mode = "doublet", cell_type_col = "subclusters")
+  df
   })
+
+# salvo
+# save(ann_list_RCTD, file = paste0(Rd_path, "annot_results_RCTD.RData"))
+```
+
+Add cell_type info to the spe_list_wb7
+```{r}
+ann_list_RCTD
+spe_list_updated <- map2(spe_list_wb7, ann_list_RCTD, function(spe, ann_df) {
+    # Find the matching order for cell IDs
+    match_indices <- match(colnames(spe), ann_df$cell_id)
+    # Add the 'first_type' column to colData, reordering based on the match
+    spe$labels_rctd <- ann_df$first_type[match_indices]
+    
+    # Return the modified spe object
+    return(spe)
+  }
+)
 ```
 
 
 ### Results
 
 ```{r}
-lapply(spe_list_wb7, function(spe) print(table(colData(spe)$cell_type)))
+lapply(ann_list_RCTD, function(elem) print(table(elem$spot_class)))
+lapply(ann_list_RCTD, function(elem) print(table(elem$first_type)))
+lapply(spe_list_updated, function(spe) {summary(as.factor(spe$first_type))})
 ```
 
 
+
+```{r}
+heatplot_doublet <- function(dt){
+  # dt <- ann_list_RCTD$blocco1_c26STAT3
+  
+  plot_data <- dt |> 
+    count(spot_class, first_type, name = "count") # We name the count column "count"
+  
+  # 2. Create the heatmap plot
+  p <- ggplot(plot_data, aes(x = spot_class, y = first_type, fill = count)) +
+    geom_tile(color = "white", lwd = 1) + # geom_tile creates the heatmap squares
+    geom_text(aes(label = count), color = "black", size = 4) + # Add the count numbers on top
+    scale_fill_gradient(low = "lightblue", high = "darkblue") + # Define the color scale
+    labs(
+      title = "Frequency of First Type within each Spot Class",
+      x = "Spot Class",
+      y = "First Type",
+      fill = "Frequency"
+    ) +
+    theme_minimal() + # Use a clean theme
+    theme(
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 12),
+      axis.text.y = element_text(size = 12),
+      panel.grid = element_blank() # Remove grid lines for a cleaner look
+    )
+  return(p)
+}
+```
+
+Heatmap of cell_type vs spot classification
+
+```{r}
+plots <- map(ann_list_RCTD, heatplot_doublet)
+
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path, name, "_spot_heatmap.png"), plot = plot, dpi = 700)
+})
+```
+
+
+
 #### Plots
+
+Load dataset with all annotation and redo the plots
+```{r}
+load(paste0(Rd_path, "spe_list_nuclei_ann.RData"))
+```
+
+Remove the blocco7
+```{r}
+spe_list_wb7 <- spe_list_up[!startsWith(names(spe_list_up), "blocco7_")]
+```
+
 
 Visualizzazione delle annotazioni sui tessuti, prima tutti i nuclei e relative
 annotazioni e sotto solo i nuclei annotati, rimuovendo gli NA
 ```{r rctd_plot}
 
 plots <- imap(spe_list_wb7, ~ {
-  plotCoords(.x, annotate = "cell_type",
+  plotCoords(.x, annotate = "labels_rctd",
              point_size = 0.5,
-             x_coord = "x", y_coord = "y") +
+             x_coord = "y", y_coord = "x") +
     scale_color_manual(values = color_vector) +
     theme(
       legend.key.width  = unit(0.5, "lines"),
@@ -204,8 +236,8 @@ plots <- imap(spe_list_wb7, ~ {
 })
 
 
-imap(plots, function(plot, name){
-  ggsave(paste0(pl_path, name, "_annot.png"), plot = plot, dpi = 700)
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path, "spat_annot/", name, "_annot.png"), plot = plot, dpi = 400, create.dir = TRUE)
 })
 ```
 
@@ -214,11 +246,11 @@ imap(plots, function(plot, name){
 ```{r}
 plots <- imap(spe_list_wb7, function(spe, nm) {
   # Determine where the annotation lives and subset accordingly
-    keep <- !is.na(spe$cell_type)
+    keep <- !is.na(spe$labels_rctd)
     if (!any(keep)) return(NULL)
     p <- spe[, keep] |> 
-      plotCoords(annotate = "cell_type",
-                    point_size = 0.5, x_coord = "x", y_coord = "y") + 
+      plotCoords(annotate = "labels_rctd",
+                    point_size = 0.5, x_coord = "y", y_coord = "x") + 
       scale_color_manual(values = color_vector) +
       theme(legend.key.width  = unit(0.1, "lines"),
             legend.key.height = unit(1, "lines")
@@ -226,43 +258,98 @@ plots <- imap(spe_list_wb7, function(spe, nm) {
       ggtitle(nm)
 })
 
-imap(plots, function(plot, name){
-  ggsave(paste0(pl_path, name, "_ann.png"), plot = plot, dpi = 700)
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path, "spat_annot/", name, "_ann_noNA.png"), plot = plot, dpi = 700)
+})
+```
+
+
+### Divided by cell type
+```{r}
+cell_types <- unique(spe_list_wb7$blocco1_c26STAT3$labels_rctd)[-1] # first is NA
+plot_grids <- imap(spe_list_wb7, function(spe, spe_name) {
+
+  # Inner loop to create a list of plots for each cell type
+  list_of_plots <- map(cell_types, function(type) {
+    
+    # --- YOUR FIX IMPLEMENTED ---
+    # 1. Create a local copy to be safe.
+    spe_local <- spe
+    
+    # 2. Programmatically create a new column named after the content of `type`.
+    # For example, if type is "Endothelial", this creates spe_local$Endothelial
+    spe_local$is_here <- spe_local$labels_rctd == type
+    
+    # 3. Call plotCoords, using the `type` variable as the column name string.
+    p <- plotCoords(
+      spe_local,
+      x_coord = "y",
+      y_coord = "x",
+      annotate = "is_here", # This now correctly refers to the new column
+      point_size = 0.05
+    ) +
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80"), name = "Present") +
+      labs(title = type) # The subplot title is still the cell type name
+    
+    return(p)
+  })
+  
+  # --- The rest of your code is correct ---
+  
+  # Combine the list of plots into a single grid
+  final_grid <- wrap_plots(list_of_plots, nrow = 3, ncol = 5, guides = "collect") &
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(size = 8)
+    )
+  
+  # Add a main title for the entire grid
+  final_grid <- final_grid + plot_annotation(title = spe_name)
+  
+  return(final_grid)
+})
+
+
+iwalk(plot_grids, function(plot, name){
+  # ggsave(paste0(pl_path,"spat_annot/by_type/", name, "_b1_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+  ggsave(paste0(pl_path,"spat_annot/by_type/", name, "_rctd_annot.png"), plot = plot, dpi = 400, units = "cm", width = 30, height = 20, create.dir = TRUE)
 })
 ```
 
 #### Barplot
 
 ```{r}
-
-load(paste0(Rd_path, "spe_list_nuclei_dec.RData"))
-
 # Costruisci un data frame con tutte le proporzioni per ogni oggetto
-prop_df <- imap_dfr(spe_list_wb7, function(spe, name) {
-  tab <- table(spe$cell_type)
+prop_df_ordered <- imap_dfr(spe_list_wb7, function(spe, name) {
+  tab <- base::table(spe$labels_rctd)
   prop <- prop.table(tab)
-  tibble(
+  tissue_type <- unique(spe$tissue_type)
+  data.table(
     sample_id = name,
     cell_type = names(prop),
-    proportion = as.numeric(prop)
+    proportion = as.numeric(prop),
+    tissue_type = tissue_type
   )
-})
+}) |> 
+  mutate(sample_id = fct_reorder(sample_id, tissue_type))
+
 
 # orizzontale bars
-ggplot(prop_df, aes(x = sample_id, y = proportion, fill = cell_type)) +
+ggplot(prop_df_ordered, aes(x = sample_id, y = proportion, fill = cell_type)) +
   geom_col() +
   coord_flip() +
   scale_x_discrete(name = "Sample") +
-  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_manual(values = color_vector) +
   theme_minimal()
 
 ggsave(paste0(pl_path, "cell_type_proportions_oriz.png"), width = 10, height = 6, dpi = 300)
 
 # vertical bars
-ggplot(prop_df, aes(x = sample_id, y = proportion, fill = cell_type)) +
+ggplot(prop_df_ordered, aes(x = sample_id, y = proportion, fill = cell_type)) +
   geom_col() +                             # geom_col uses the y value directly (identity)
-  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_manual(values = color_vector) +# use your named color_vector; otherwise use scale_fill_brewer()
   labs(x = "Sample", y = "Proportion", fill = "Cell type") +
   theme_minimal() +
@@ -275,17 +362,10 @@ ggsave(paste0(pl_path, "cell_type_proportions_vert.png"), width = 10, height = 6
 #### Barplot aggregato per condizione (SENZA BLOCCO 7)
 
 ```{r}
-prop_df_condition <- lapply(spe_list_wb7, function(spe) {
-  data.frame(
-    tissue_type = unique(spe$tissue_type),
-    cell_type = spe$cell_type
-  )
-}) |> bind_rows() |> filter(!is.na(cell_type))
-
-prop_df_condition <- imap_dfr(spe_list_wb7, function(spe, name) {
+prop_df_condition <- imap_dfr(spe_list_updated, function(spe, name) {
   tibble(
     tissue_type = unique(spe$tissue_type),
-    cell_type = spe$cell_type
+    cell_type = spe$labels_rctd
   ) |> 
     filter(!is.na(cell_type))
 }) |> 
@@ -309,57 +389,21 @@ ggplot(prop_df_condition, aes(x = tissue_type, y = proportion, fill = cell_type)
 ggsave(paste0(pl_path, "cell_type_proportions_by_condition.png"), width = 10, height = 6, dpi = 300)
 ```
 
-
-
-# Confronto con risultati multiome murino
-
-```{r}
-
-sce_ref #intanto guarda com'è l'oggetto
-table(colData(sce_ref)$condition)
-
-prop_df_condition <- 
-  data.frame(
-    tissue_type = colData(sce_ref)$condition,
-    cell_type =  colData(sce_ref)$subclusters
-  ) |>
-  count(tissue_type, cell_type) |>
-  group_by(tissue_type) |>
-  mutate(proportion = n / sum(n)) |>
-  ungroup()
-
-ggplot(prop_df_condition, aes(x = tissue_type, y = proportion, fill = cell_type)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = color_vector) +
-  theme_minimal() +
-  labs(
-    title = "Proporzioni dei tipi cellulari per condizione",
-    x = "Condizione (tissue_type)",
-    y = "Proporzione",
-    fill = "Tipo Cellulare"
-  ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-ggsave(paste0(pl_path, "cell_type_multiome.png"), width = 10, height = 6, dpi = 300)
-```
-
-
-
 ## Tabelle proporzioni
 
 ```{r}
 #per campione
-celltype_table <- imap_dfr(spe_list_wb7, function(spe, name) {
+celltype_table <- imap_dfr(spe_list_updated, function(spe, name) {
   as.data.frame(colData(spe)) |> 
-    filter(!is.na(cell_type)) |>             # drop NA cell_type rows
-    count(cell_type, name = "count")  |>      # tally per cell type
+    filter(!is.na(labels_rctd)) |>             # drop NA cell_type rows
+    count(labels_rctd, name = "count")  |>      # tally per cell type
     mutate(proportion = count / sum(count),
            sample = name)                    # use imap name as sample id
 })
 
 celltype_matrix <- celltype_table |>
-  select(sample, cell_type, proportion) |>
-  pivot_wider(names_from = cell_type, values_from = proportion, values_fill = 0)
+  select(sample, labels_rctd, proportion) |>
+  pivot_wider(names_from = labels_rctd, values_from = proportion, values_fill = 0)
 
 celltype_matrix
 
@@ -369,11 +413,11 @@ write_xlsx(celltype_matrix, paste0(res_path, "celltype_proportions_per_sample.xl
 
 ```{r}
 #per tipo di campione (SENZA B7) ----------------------------------------------------
-props_wide <- imap_dfr(spe_list_wb7, function(spe, name) {
+props_wide <- imap_dfr(spe_list_updated, function(spe, name) {
   tibble(
     tissue_type = rep(as.character(unique(spe$tissue_type)),
-                      length.out = length(spe$cell_type)),
-    cell_type   = as.character(spe$cell_type)
+                      length.out = length(spe$labels_rctd)),
+    cell_type   = as.character(spe$labels_rctd)
   )
 }) |>
   count(tissue_type, cell_type, name = "n") |>
@@ -389,12 +433,12 @@ write_xlsx(props_wide, path = paste0(res_path, "celltype_by_tissue_type.xlsx"))
 
 # boxplot cell type proportions stratified by condition (SENZA BLOCCO7)
 ```{r}
-prop_per_sample <- imap_dfr(spe_list_wb7, function(spe, name) {
+prop_per_sample <- imap_dfr(spe_list_updated, function(spe, name) {
   cd <- as.data.frame(SummarizedExperiment::colData(spe))
   
-  cd %>%
-    filter(!is.na(cell_type)) %>%
-    count(cell_type, name = "count") %>%
+  cd |> 
+    filter(!is.na(labels_rctd)) |> 
+    count(labels_rctd, name = "count") |> 
     mutate(proportion  = count / sum(count),
            sample      = name,
            tissue_type = paste(unique(as.character(cd$tissue_type)), collapse = ", "))
@@ -402,7 +446,7 @@ prop_per_sample <- imap_dfr(spe_list_wb7, function(spe, name) {
 
 ggplot(prop_per_sample, aes(x = tissue_type, y = proportion, fill = tissue_type)) +
   geom_boxplot(outlier.shape = 21) +
-  facet_wrap(~ cell_type, scales = "free_y") +
+  facet_wrap(~ labels_rctd, scales = "free_y") +
   scale_fill_manual(values = c("sham" = "#1b9e77", "c26" = "#d95f02")) +
   theme_minimal(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -430,25 +474,25 @@ your_color_vector <- setNames(
 
 your_color_vector["Myonuclei_IIb"]     <- "blue"
 your_color_vector["Myonuclei_Trim63"]  <- "red"
+# 
+# plot_list <- imap(spe_list_updated, function(spe, nm) {
+#   plotCoords(spe, annotate = "labels_rctd", point_size = 0.5) +
+#     scale_color_manual(values = your_color_vector, na.value = default_color) +
+#     ggtitle(nm) +   # <- titolo con il nome del campione
+#     theme(
+#       legend.key.width  = unit(0.5, "lines"),
+#       legend.key.height = unit(1, "lines"),
+#       plot.title = element_text(hjust = 0.5)  # per centrare il titolo
+#     )
+# })
 
-plot_list <- imap(spe_list_wb7, function(spe, nm) {
-  plotCoords(spe, annotate = "cell_type", point_size = 0.5) +
-    scale_color_manual(values = your_color_vector, na.value = default_color) +
-    ggtitle(nm) +   # <- titolo con il nome del campione
-    theme(
-      legend.key.width  = unit(0.5, "lines"),
-      legend.key.height = unit(1, "lines"),
-      plot.title = element_text(hjust = 0.5)  # per centrare il titolo
-    )
-})
 
-
-plots <- imap(spe_list_wb7, function(spe, nm) {
+plots <- imap(spe_list_updated, function(spe, nm) {
   # Determine where the annotation lives and subset accordingly
-    keep <- spe$cell_type %in% c("Myonuclei_IIb", "Myonuclei_Trim63")
+    keep <- spe$labels_rctd %in% c("Myonuclei_IIb", "Myonuclei_Trim63")
     if (!any(keep)) return(NULL)
     p <- spe[, keep] |> 
-      plotCoords(annotate = "cell_type", point_size = 0.5) +
+      plotCoords(annotate = "labels_rctd", point_size = 0.5) +
       scale_color_manual(values = your_color_vector) +
       ggtitle(nm) +   # <- titolo con il nome del campione
       theme(
@@ -458,7 +502,25 @@ plots <- imap(spe_list_wb7, function(spe, nm) {
       )
 })
 
-imap(plots, function(plot, name){
-  ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path,"spat_annot/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
 })
 ```
+
+# Final thing
+
+Add the labels info to the spe_list with the SingleR ones
+
+```{r}
+load(paste0(Rd_path,"spe_list_nuclei_ann.RData"))
+spe_list_updated <- map2(spe_list_up, ann_list_RCTD, function(spe, ann_df) {
+    # Find the matching order for cell IDs
+    match_indices <- match(colnames(spe), ann_df$cell_id)
+    # Add the 'first_type' column to colData, reordering based on the match
+    spe$labels_rctd <- ann_df$first_type[match_indices]
+    # Return the modified spe object
+    return(spe)
+  }
+)
+```
+

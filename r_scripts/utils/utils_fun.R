@@ -27,10 +27,11 @@ dot_plot_paper <- function(df)
 
 # custom spatialQC metrics ----
 
-vHD_spatialPerCellQC <- function(spe, micronConvFact=0.316, rmZeros=TRUE) {
+vHD_spatialPerCellQC <- function(spe, micronConvFact=0.316, rmZeros=TRUE, ...) {
   stopifnot(is(object=spe, "SpatialExperiment"))
-
-  spe <- addPerCellQC(spe)
+  
+  is.mito <- BiocGenerics::grep("^mt-", BiocGenerics::rownames(spe), ignore.case = TRUE)
+  spe <- addPerCellQC(spe, subsets = list(Mito = is.mito), ...)
 
   if(!all(spatialCoordsNames(spe) %in% names(colData(spe)))) {
     colData(spe) <- cbind.DataFrame(colData(spe), spatialCoords(spe))
@@ -57,5 +58,28 @@ vHD_spatialPerCellQC <- function(spe, micronConvFact=0.316, rmZeros=TRUE) {
   return(spe)
 }
 
-
+# mapping labels from sublist to complete list ----
+mappingLabels <- function(spe_list, ann_list) {
+  # Your existing loop is perfect
+  for (name in names(spe_list)) {
+    if (name %in% names(ann_list)) {
+      
+      spe <- spe_list[[name]]
+      ann_df <- ann_list[[name]]
+      
+      match_indices <- match(colnames(spe), ann_df$cell_id)
+      spe$labels_rctd <- ann_df$first_type[match_indices]
+      spe_list[[name]] <- spe
+      
+      cat("Mapped 'labels_rctd' for object:", name, "\n")
+      
+    } else {
+      cat("Skipping object:", name, "(no corresponding annotation found)\n")
+    }
+  }
+  
+  # --- THE CRUCIAL ADDITION ---
+  # Return the fully modified list
+  return(spe_list)
+}
 
