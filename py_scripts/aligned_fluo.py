@@ -1,12 +1,12 @@
-from skimage import io
-from spatialdata.models import Image2DModel, Labels2DModel, ShapesModel
 import spatialdata as sd
+from spatialdata.models import Image2DModel, Labels2DModel, ShapesModel
 from spatialdata.transformations import Identity, get_transformation, remove_transformation
+import sopa
 import spatialdata_plot
 import matplotlib.pyplot as plt
+from skimage import io
 import numpy as np
 from py_scripts.utils.utils_fun import read_from_json
-import sopa
 from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 
 # let's display the areas where no expression is detected as transparent
@@ -189,3 +189,8 @@ plt.figure(figsize=(50, 50))
 ax = plt.gca()
 sdata.pl.render_shapes('filtered_nuclei', color = 'GFP_value', cmap = "Wistia", table_name = 'filter_try').pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/GFP_nuclei_filtered.png')
 
+
+
+./bftools/bfconvert \
+  Fluo_images/overlayed_ome_tif/blocco1.ome.tif \
+  Fluo_images/warped_tif/blocco1.tif

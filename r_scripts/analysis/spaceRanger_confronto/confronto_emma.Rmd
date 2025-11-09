@@ -1,0 +1,351 @@
+---
+title: "confronto_emma"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(SpaceTrooper)
+library(ggplot2)
+library(ggspavis)
+library(patchwork)
+library(jsonlite)
+library(anndataR)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+library(writexl)
+library(BiocParallel)
+library(SingleR)
+library(dplyr)
+library(tidyr)
+library(writexl)
+
+# to read spatialdata objects
+library(ggnewscale)
+#library(SpatialData)
+library(SingleCellExperiment)
+
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+# Plots post annotation of spaceranger segmentation results
+
+Paths
+```{r}
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/confronto_emma/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_ann/spaceranger/"
+```
+
+Data
+```{r}
+load(paste0(Rd_path, "color_cell_dec.RData"))
+load(paste0(Rd_path, "spaceranger_b1_spe.RData"))
+load(paste0(Rd_path, "spe_list_nuclei_ann.RData"))
+load(paste0(Rd_path, "spe_blocco1_emma.RData")) # dati emma coi bin
+```
+
+Select only blocco1 samples to compare with spaceranger
+```{r}
+spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), "blocco1")]
+rm(spe_list_up)
+```
+
+## Spatial plot of annotations
+
+Annotazione RCTD di emma
+```{r}
+plots <- imap(blocco1, function(spe, name) {
+  plotCentroids(spe, colourBy = "cell_type", size = 1.5) +
+  scale_color_manual(values = color_vector) +
+  theme(
+    legend.key.width  = unit(0.5, "lines"),
+    legend.key.height = unit(1, "lines")
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  +
+  scale_y_reverse()
+
+})
+
+
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path,"spat_annotation/", name, ".png"), 
+         plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+```
+
+la mia segmentazione
+```{r}
+plots <- imap(spe_list_b1, function(spe, name) {
+  plotCoords(spe, annotate = "labels_singler",
+             point_size = 0.1,
+             x_coord = "y", y_coord = "x") +
+    scale_color_manual(values = color_vector) +
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines")
+    ) +
+    ggtitle(name)
+})
+
+
+iwalk(plots, function(plot, name){
+  # ggsave(paste0(pl_path,"spat_annotation/", name, "_singler_annot.png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/", name, "_b1_miei.png"), plot = plot, dpi = 700)
+})
+```
+
+## Divided by cell type
+### GRID
+```{r}
+# solo myonuclei
+plot_grids <- list()
+for (spe_name in names(blocco1)) {
+  spe <- blocco1[[spe_name]]
+  ws <- colData(spe)[,seq(12,18,1)] # bisogna cambiare questo indicatore [,seq(8,22,1)] tutti i tipi [,seq(12,18,1)] solo myonuclei
+  p <- lapply(names(ws), function(nm) {
+  plotCoords(spe, annotate = nm, point_size = 0.1) +
+    scale_color_gradientn(
+      colors = rev(hcl.colors(9, "Rocket")),
+      limits = c(0, 1)  # fissa scala da 0 a 1
+    ) +
+    ggtitle(nm)
+  })
+
+  final_plot <- wrap_plots(p, nrow = 3, ncol = 5, guides = "collect") &
+  theme(
+    legend.key.width = unit(0.5, "lines"),
+    legend.key.height = unit(1, "lines"),
+    strip.text = element_text(size = 5)
+  ) &
+  scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")), limits = c(0, 1))
+  plot_grids[[spe_name]] <- final_plot
+}
+
+#grid saving
+iwalk(plot_grids, function(plot, name){
+  ggsave(paste0(pl_path, "spat_annotation/by_type/", name, "_myo.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+```
+
+## Barplot proportions
+
+```{r}
+library(forcats)
+# Costruisci un data frame con tutte le proporzioni per ogni oggetto
+prop_df_ordered <- imap_dfr(blocco1, function(spe, name) {
+  tab <- base::table(spe$cell_type)
+  prop <- prop.table(tab)
+  tissue_type <- unique(spe$tissue_type)
+  data.table(
+    sample_id = name,
+    cell_type = names(prop),
+    proportion = as.numeric(prop),
+    tissue_type = tissue_type
+  )
+})
+setorder(prop_df_ordered, tissue_type)
+
+
+
+# orizzontale bars
+ggplot(prop_df_ordered, aes(x = sample_id, y = proportion, fill = cell_type)) +
+  geom_col() +
+  coord_flip() +
+  scale_x_discrete(name = "Sample") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = color_vector) +
+  theme_minimal()
+
+#ggsave(paste0(pl_path, "cell_type_proportions_oriz.png"), width = 10, height = 6, dpi = 300) # wilcoxon
+ggsave(paste0(pl_path, "cell_type_proportions_spaceranger_oriz.png"), width = 10, height = 6, dpi = 300) # t-test
+
+# vertical bars
+ggplot(prop_df_ordered, aes(x = sample_id, y = proportion, fill = cell_type)) +
+  geom_col() +                             # geom_col uses the y value directly (identity)
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = color_vector) +# use your named color_vector; otherwise use scale_fill_brewer()
+  labs(x = "Sample", y = "Proportion", fill = "Cell type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+#ggsave(paste0(pl_path, "cell_type_proportions_vert.png"), width = 10, height = 6, dpi = 300)
+ggsave(paste0(pl_path, "cell_type_proportions_emma_vert.png"), width = 10, height = 6, dpi = 300)
+```
+
+## Barplot stratified by sample
+
+### Barplot cell type proportions stratified by sample
+
+Spaceranger results
+
+```{r}
+prop_per_sample <- imap_dfr(blocco1, function(spe, name) {
+  cd <- as.data.table(SummarizedExperiment::colData(spe))
+  
+  cd |>
+    filter(!is.na(cell_type)) |>
+    dplyr::count(cell_type, name = "count") |>
+    mutate(proportion  = count / sum(count),
+           sample      = name,
+           tissue_type = paste(unique(as.character(cd$tissue_type)), collapse = ", "))
+})
+
+ggplot(prop_per_sample, aes(x = sample, y = proportion, fill = tissue_type)) +
+  geom_col() + # Use geom_col() for a bar plot of existing values
+  facet_wrap(~ cell_type, scales = "free_y") +
+  scale_fill_manual(values = c("sham" = "#1b9e77", "c26" = "#d95f02")) +
+  theme_minimal(base_size = 12) +
+  theme(
+    # Rotate labels 90 degrees for better readability with many samples
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  ) +
+  labs(
+    title = "Proportion of Cell Types per Sample",
+    x = "Sample",
+    y = "Proportion"
+  )
+
+ggsave(paste0(pl_path, "barplot_celltype_prop_by_sample_emma.png"), width = 10, height = 6, dpi = 300)
+#ggsave(paste0(pl_path, "boxplot_celltype_t_prop_by_cond.png"), width = 10, height = 6, dpi = 300)
+```
+
+
+## Spatial relationship between trim and 2b myo
+
+```{r}
+default_color <- "white"
+your_color_vector <- setNames(
+  rep(default_color, 16),
+  c("Endothelial", "FAPs", "Immune_Cells", "MuSC", "Myonuclei_IIx",
+    "Myonuclei_IIx_IIa", "Myonuclei_IIx_IIb", "Myonuclei_MTJ",
+    "Myonuclei_NMJ", "Nervous_System", "Pericyte",
+    "Smooth_Muscular", "Tenocyte",
+    "Myonuclei_IIb", "Myonuclei_Trim63")
+)
+
+your_color_vector["Myonuclei_IIb"]     <- "blue"
+your_color_vector["Myonuclei_Trim63"]  <- "red"
+
+plot_list <- imap(sr_spe_list, function(spe, nm) {
+  plotCoords(spe, annotate = "labels_singler", point_size = 0.1) +
+    scale_color_manual(values = your_color_vector, na.value = default_color) +
+    ggtitle(nm) +   # <- titolo con il nome del campione
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(hjust = 0.5)  # per centrare il titolo
+    )
+})
+# veramente brutti così, non ha senso
+
+
+plots <- imap(sr_spe_list, function(spe, nm) {
+  # Determine where the annotation lives and subset accordingly
+    keep <- spe$labels_singler %in% c("Myonuclei_IIb", "Myonuclei_Trim63")
+    if (!any(keep)) return(NULL)
+    p <- spe[, keep] |> 
+      plotCoords(annotate = "labels_singler", point_size = 0.1) +
+      scale_color_manual(values = your_color_vector) +
+      ggtitle(nm) +   # <- titolo con il nome del campione
+      theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(hjust = 0.5)  # per centrare il titolo
+      )
+})
+
+imap(plots, function(plot, name){
+  #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+})
+```
+
+
+# DOTPLOT
+```{r}
+
+df <- as.data.frame(t(expr_combat[markers, , drop=FALSE])) 
+df$sample    <- colData(pb_wb7)$sample
+df$condition <- colData(pb_wb7)$tissue_type
+df$celltype  <- colData(pb_wb7)$cell_type
+
+df_long <- pivot_longer(df, cols = all_of(markers),
+                        names_to = "gene", values_to = "expr")
+
+df <- df %>% filter(condition %in% c("sham","c26"))
+
+df_long <- pivot_longer(df, cols = all_of(markers),
+                        names_to = "gene", values_to = "expr")
+
+# calcolo media e percentuale per ogni celltype × condition × gene
+dot_data <- df_long %>%
+  group_by(condition, celltype, gene) %>%
+  summarise(
+    pct_expr = sum(expr > 0) / n() * 100,
+    avg_expr = mean(expr[expr > 0], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# genera grafici separati per ogni marker
+plots <- lapply(markers, function(g){
+  ggplot(dot_data %>% filter(gene == g),
+         aes(x = celltype, y = condition)) +
+    geom_point(aes(size = pct_expr, color = avg_expr)) +
+    scale_color_gradient(low = "grey", high = "red") +
+    labs(title = g, y = "Condition", x = "Cell type",
+         color = "Avg expression", size = "% expr >0") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+})
+
+#salvataggio
+for(i in seq_along(markers)){
+  ggsave(
+    filename = paste0(markers[i], "_dotplot.jpg"),  
+    plot = plots[[i]],                               
+    width = 8, height = 6, units = "in",            
+    dpi = 300                                       
+  )
+}
+
+```
+
+#Visualizzazione nel tessuto con scale separate (no confronto)
+```{r}
+
+for (slice_name in names(subset_list)) {
+  spe <- subset_list[[slice_name]]
+  
+  expr_matrix <- counts(spe)["Pax7", , drop = FALSE]
+  
+  for (gene in markers) {
+    expr <- as.numeric(expr_matrix[gene, ])
+    coords <- as.data.frame(spatialCoords(spe)[colnames(spe), ])
+    coords$expr <- expr
+    
+    p <- ggplot(coords, aes(x = pxl_col_in_fullres, y = pxl_row_in_fullres, color = expr)) +
+      geom_point(size = 0.3) +
+      coord_fixed() +
+      scale_y_reverse() +
+      ggtitle(paste(slice_name, "-", gene)) +
+      theme_void() +
+      theme(plot.title = element_text(size = 8)) +
+      scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+    
+    print(p)
+    
+    ggsave(
+      filename = file.path(sample_dir, paste0(gene, ".png")),
+      plot = p,
+      width = 6, height = 5, dpi = 300
+    )
+  }
+}
+```

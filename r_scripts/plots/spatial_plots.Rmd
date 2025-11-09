@@ -1,0 +1,220 @@
+---
+title: "All kind of plots"
+author: "Valerio Reffo"
+date: "2025-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(patchwork)
+library(jsonlite)
+library(anndataR)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+library(writexl)
+library(BiocParallel)
+library(SingleR)
+library(dplyr)
+library(tidyr)
+library(writexl)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+Paths to be defined
+
+```{r}
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/singler_annot/spaceranger/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results"
+quarto_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/presentations/segment_comparison/images/"
+```
+
+Data
+```{r}
+load(paste0(Rd_path, "color_cell_dec.RData"))
+load(paste0(Rd_path, 'spe_list_nuclei_ann.RData'))
+load(paste0(Rd_path, 'spaceranger_b1_spe.RData'))
+
+spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), 'blocco1')]
+```
+
+# Spatial visualization of the annotated spots/nuclei
+
+
+```{r}
+plots <- imap(spe_list_b1, function(spe, name) {
+  spe$cell_type <- as.factor(spe$labels_singler)
+  plotCentroids(spe, colourBy = "cell_type", size = 0.5) +
+  scale_color_manual(values = color_vector) +
+  theme(
+    legend.key.width  = unit(0.5, "lines"),
+    legend.key.height = unit(1, "lines")
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  +
+  scale_y_reverse()
+
+})
+
+
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path,"spat_annotation/", name, "_b1_miei.png"), 
+         plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+```
+
+## Divided by cell type
+
+### GRID
+```{r}
+cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
+
+# only myonuclei
+(cell_types <- cell_types[startsWith(cell_types, 'Myonuclei')])
+
+plot_grids <- imap(spe_list_b1, function(spe, spe_name) {
+  
+  # Inner loop to create a list of plots for each cell type
+  list_of_plots <- map(cell_types, function(type) {
+    
+    # --- YOUR FIX IMPLEMENTED ---
+    # 1. Create a local copy to be safe.
+    spe_local <- spe
+    
+    # 2. Programmatically create a new column named after the content of `type`.
+    # For example, if type is "Endothelial", this creates spe_local$Endothelial
+    spe_local$is_here <- as.factor(spe_local$labels_singler == type)
+    
+    # 3. Call plotCentroids, using the `type` variable as the column name string.
+    p <- SpaceTrooper::plotCentroids(spe = spe_local, colourBy = "is_here") +
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80")) +
+      labs(title = type) + # The subplot title is the cell type name
+      scale_y_reverse()
+    
+    return(p)
+  })
+  
+  # Combine the list of plots into a single grid
+  final_grid <- wrap_plots(list_of_plots, nrow = 2, ncol = 4, guides = "collect") &
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(size = 8)
+    )
+  
+  # Add a main title for the entire grid
+  final_grid <- final_grid + plot_annotation(title = spe_name)
+  
+  return(final_grid)
+})
+
+#grid saving
+iwalk(plot_grids, function(plot, name){
+  ggsave(paste0(pl_path, "spat_annotation/by_type/", name, "_myo_b1_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+```
+
+
+### SINGLES
+
+```{r}
+cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
+
+# only myonuclei
+# (cell_types <- cell_types[startsWith(cell_types, 'Myonuclei')])
+
+plot_lists <- imap(sr_spe_list, function(spe, name) {
+  
+  # for each sample create a plot of every cell type
+  
+  # Inner loop to create a list of plots for each cell type
+  list_of_plots <- map(cell_types, function(type) {
+    
+    # --- YOUR FIX IMPLEMENTED ---
+    # 1. Create a local copy to be safe.
+    spe_local <- spe
+    
+    # 2. Programmatically create a new column named after the content of `type`.
+    # For example, if type is "Endothelial", this creates spe_local$Endothelial
+    spe_local$is_here <- as.factor(spe_local$labels_singler == type)
+    
+    # 3. Call plotCoords, using the `type` variable as the column name string.
+    p <- SpaceTrooper::plotCentroids(spe = spe_local, colourBy = "is_here") + 
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80")) +
+      labs(title = type) + # The subplot title is the cell type name 
+      scale_y_reverse()
+
+    
+    return(p)
+  })
+  names(list_of_plots) <- cell_types
+
+  return(list_of_plots)
+})
+
+
+iwalk(plot_lists, function(sample, name){
+  iwalk(sample, function(celltype, cellname){
+    ggsave(paste0(quarto_path, "myonuclei_SR/", name,"/", cellname, ".png"), plot = celltype, dpi = 400, units = "cm", width = 50, height = 30, 
+           create.dir = TRUE)
+  })
+})
+```
+
+
+
+## Spatial relationship between trim and 2b myo
+
+```{r}
+default_color <- "grey80"
+your_color_vector <- setNames(
+  rep(default_color, 16),
+  c("Endothelial", "FAPs", "Immune_Cells", "MuSC", "Myonuclei_IIx",
+    "Myonuclei_IIx_IIa", "Myonuclei_IIx_IIb", "Myonuclei_MTJ",
+    "Myonuclei_NMJ", "Nervous_System", "Pericyte",
+    "Smooth_Muscular", "Tenocyte",
+    "Myonuclei_IIb", "Myonuclei_Trim63")
+)
+
+cell_types_to_keep <- c("Myonuclei_IIb", "Myonuclei_Trim63")
+
+your_color_vector[cell_types_to_keep[1]] <- "red3"
+your_color_vector[cell_types_to_keep[2]] <- "blue"
+
+
+plots <- imap(spe_list_b1, function(spe, name){
+  spe$cell_type <- spe$labels_singler
+  # If a value in 'cell_type' is in our 'keep' list, we keep it. Otherwise, it becomes NA.
+  spe$cell_type <- as.factor(ifelse(spe$cell_type %in% cell_types_to_keep, # condition
+    as.character(spe_prova$cell_type), # if is true: Keep the original value (as character)
+    NA                                # otherwise: Replace with NA
+  ))
+  
+  plotCentroids(spe, colourBy = "cell_type", size = 0.3) +
+    scale_color_manual(values = your_color_vector, na.value = default_color) +
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines")
+    ) +
+    guides(color = guide_legend(override.aes = list(size = 5)))  +
+    scale_y_reverse()
+})
+
+iwalk(plots, function(plot, name){
+  #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_t_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+})
+```
+
+
+
+
+

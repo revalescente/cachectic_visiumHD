@@ -1,0 +1,171 @@
+---
+title: "spaceranger_filtering"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(ggnewscale)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+library(SingleR)
+library(dplyr)
+library(tidyr)
+library(SingleCellExperiment)
+library(SpaceTrooper)
+library(patchwork)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+Paths
+```{r}
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/filtered_nuclei/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/"
+```
+
+Data
+```{r}
+load(paste0(Rd_path, "spe_list_nuclei_ann.RData"))
+load(paste0(Rd_path, "color_cell_dec.RData"))
+#save(sr_spe_list, file = paste0(Rd_path, "spaceranger_b1_spe.RData"))
+```
+
+# QC metrics
+
+To integrate the csv file with morphological info needed for the task
+
+```{r}
+
+morph_list <- list()
+nuclei_morph <- read.csv("/mnt/europa/valerio/data/data_tables/b1_c26foxO_nuclei_morph_SpaceRanger.csv")
+morph_list[["blocco1_c26foxO"]] <- nuclei_morph
+```
+
+```{r}
+sr_spe_list <- map2(sr_spe_list, morph_list, function(spe, morf_df){
+  
+  col_data_df <- as.data.frame(colData(spe)) |> 
+    tibble::rownames_to_column(var = "cell_id")
+  
+  merged_coldata <- left_join(col_data_df, morf_df, by = "cell_id")
+  rownames(merged_coldata) <- merged_coldata$cell_id
+  
+  colData(spe) <- DataFrame(merged_coldata)
+  spe
+})
+```
+
+
+```{r}
+sr_spe_list <- imap(sr_spe_list, \(spe, name) {vHD_spatialPerCellQC(spe)})
+```
+
+Plot and save most important metrics
+
+```{r}
+metric_to_plot = "AspectRatio"
+plots <- imap(sr_spe_list, \(spe, name){
+  p <- plotMetricHist(spe, metric=metric_to_plot, bins = 50) +
+          ggtitle(paste0(name))
+  p
+})
+
+p1 <- wrap_plots(plots, ncol = 3) + 
+  plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt1'))
+p1
+
+ggsave(paste0(pl_path,"metrics/", metric_to_plot, "_part1.png"), plot = p1, dpi = 300, units = "cm", width = 50, height = 30)
+```
+
+I'll look only at the area of nuclei and the ratio between counts and area of the nuclei
+Since there is only one sample that has log2CountArea asymmetric enough, I'll use sc method to determine the outliers in that metric
+
+```{r}
+sr_spe_list <- imap(sr_spe_list, \(spe, name){
+  spe <- computeSpatialOutlier(spe, computeBy="Area_um", method="mc") # "mc" for asymmetric distribution of the choosen metric
+  spe <- computeSpatialOutlier(spe, computeBy="log2CountArea", method="sc") # "sc" for symmetric distribution of the choosen metric
+  spe
+})
+```
+
+```{r}
+outlier_summary_df <- imap_dfr(sr_spe_list, \(spe, name) {
+  
+  colData(spe) |>
+    as.data.frame() |>
+    select(Area_um_outlier_mc, log2CountArea_outlier_sc) |>
+    
+    # --- THE FIX IS HERE ---
+    # Convert both columns to character to remove the special class
+    mutate(across(everything(), as.character)) |>
+    
+    # Now pivot_longer will work correctly
+    pivot_longer(
+      cols = everything(),
+      names_to = "metric",
+      values_to = "outlier_type"
+    ) |>
+    
+    count(metric, outlier_type, name = "count") |>
+    
+    mutate(sample = name)
+})
+
+outlier_summary_df |> 
+  filter(
+    metric == "Area_um_outlier_mc" & outlier_type %in% c("HIGH","LOW")
+  ) |> 
+  select(sample, count, outlier_type, metric)
+
+
+outlier_summary_df |> 
+  filter(
+    metric == "log2CountArea_outlier_sc" & outlier_type == "LOW"
+  ) |> 
+  select(sample, count, outlier_type, metric)
+
+
+```
+
+Plots of the nuclei centroids colored by outliers info
+
+```{r}
+
+# "Area_um_outlier_mc"
+# "log2CountArea_outlier_sc"
+
+
+metric_to_plot = "log2CountArea_outlier_sc"
+plots <- imap(sr_spe_list, \(spe, name){
+  p <- plotCentroids(spe, colourBy = metric_to_plot, size = 0.5) +
+          ggtitle(name)
+  p
+})
+plots
+# p1 <- wrap_plots(plots[c(1:12)], ncol = 4) + 
+#   plot_annotation(title = paste0('Nuclei outliers - ', metric_to_plot))
+# p2 <- wrap_plots(plots[c(13:24)], ncol = 4) + 
+#   plot_annotation(title = paste0('Distribution of ',metric_to_plot,' Across All Samples. pt2'))
+# 
+# ggsave(paste0(pl_path,"area_outlier/", metric_to_plot, "_part1.png"), plot = p1, dpi = 300, units = "cm", width = 50, height = 30)
+# ggsave(paste0(pl_path,"area_outlier/", metric_to_plot, "_part2.png"), plot = p2, dpi = 300, units = "cm", width = 50, height = 30)
+
+iwalk(plots, function(plot, name){
+ ggsave(paste0(pl_path,"CountArea_outlier/", name, ".png"), plot = plot, dpi = 300, units = "cm", width = 50, height = 30)
+  #ggsave(paste0(pl_path,"area_outlier/", name, ".png"), plot = plot, dpi = 300, units = "cm", width = 50, height = 30)
+})
+```
+
+
+
+

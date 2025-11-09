@@ -47,15 +47,6 @@ load(paste0(Rd_path, "color_cell_dec.RData"))
 load(paste0(Rd_path, 'spe_list_nuclei_ann.RData'))
 ```
 
-```{r}
-spe_list_up <- map(spe_list_up, \(spe){
-  spe$x = NULL
-  spe$y = NULL
-  spe
-})
-```
-
-
 ## Spatial plot of annotations
 
 Sia wilcox che t-test
@@ -84,7 +75,7 @@ imap(plots, function(plot, name){
 
 ### Divided by cell type
 ```{r}
-cell_types <- unique(spe_list_up$blocco1_c26STAT3$labels_singler)
+cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
 plot_grids <- imap(spe_list_up, function(spe, spe_name) {
   
   # Inner loop to create a list of plots for each cell type
@@ -104,7 +95,7 @@ plot_grids <- imap(spe_list_up, function(spe, spe_name) {
       x_coord = "y",
       y_coord = "x",
       annotate = "is_here", # This now correctly refers to the new column
-      point_size = 0.05
+      point_size = 0.1
     ) +
       scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80"), name = "Present") +
       labs(title = type) # The subplot title is still the cell type name
@@ -130,8 +121,60 @@ plot_grids <- imap(spe_list_up, function(spe, spe_name) {
 
 
 iwalk(plot_grids, function(plot, name){
-  # ggsave(paste0(pl_path,"spat_annotation/by_type/", name, "_b1_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
   ggsave(paste0(pl_path,"spat_annotation/by_type/", name, "_singler_annot.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+```
+
+#### Only myonuclei
+```{r}
+cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
+(cell_types <- cell_types[startsWith(cell_types, 'Myonuclei')])
+plot_grids <- imap(spe_list_up, function(spe, spe_name) {
+  
+  # Inner loop to create a list of plots for each cell type
+  list_of_plots <- map(cell_types, function(type) {
+    
+    # --- YOUR FIX IMPLEMENTED ---
+    # 1. Create a local copy to be safe.
+    spe_local <- spe
+    
+    # 2. Programmatically create a new column named after the content of `type`.
+    # For example, if type is "Endothelial", this creates spe_local$Endothelial
+    spe_local$is_here <- spe_local$labels_singler == type
+    
+    # 3. Call plotCoords, using the `type` variable as the column name string.
+    p <- plotCoords(
+      spe_local,
+      x_coord = "y",
+      y_coord = "x",
+      annotate = "is_here", # This now correctly refers to the new column
+      point_size = 0.1
+    ) +
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80"), name = "Present") +
+      labs(title = type) # The subplot title is still the cell type name
+    
+    return(p)
+  })
+  
+  # --- The rest of your code is correct ---
+  
+  # Combine the list of plots into a single grid
+  final_grid <- wrap_plots(list_of_plots, nrow = 2, ncol = 4, guides = "collect") &
+    theme(
+      legend.key.width = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines"),
+      plot.title = element_text(size = 8)
+    )
+  
+  # Add a main title for the entire grid
+  final_grid <- final_grid + plot_annotation(title = spe_name)
+  
+  return(final_grid)
+})
+
+
+iwalk(plot_grids, function(plot, name){
+  ggsave(paste0(pl_path,"spat_annotation/only_myonuclei/", name, "_singler_annot.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
 })
 ```
 

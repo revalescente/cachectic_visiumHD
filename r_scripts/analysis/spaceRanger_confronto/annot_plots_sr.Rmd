@@ -46,43 +46,36 @@ Data
 load(paste0(Rd_path, "color_cell_dec.RData"))
 load(paste0(Rd_path, "spaceranger_b1_spe.RData"))
 load(paste0(Rd_path, "spe_list_nuclei_ann.RData"))
+load(paste0(Rd_path, "spe_blocco1_emma.RData")) # dati emma coi bin
 ```
 
 Select only blocco1 samples to compare with spaceranger
 ```{r}
 spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), "blocco1")]
+rm(spe_list_up)
 ```
-
-Remove x and y column from colData otherwise plotCoords doesn't work
-```{r}
-spe_list_b1 <- map(spe_list_b1, \(spe){
-  spe$x = NULL
-  spe$y = NULL
-  spe
-})
-```
-
 
 ## Spatial plot of annotations
 
 Segmentazione di spaceranger
 ```{r}
-plots <- imap(sr_spe_list, function(spe, name) {
-  plotCoords(spe, annotate = "labels_singler",
-             point_size = 0.1,
-             x_coord = "x", y_coord = "y") +
-    scale_color_manual(values = color_vector) +
-    theme(
-      legend.key.width  = unit(0.5, "lines"),
-      legend.key.height = unit(1, "lines")
-    ) +
-    ggtitle(name)
+plots <- imap(spe_list_b1, function(spe, name) {
+  spe$cell_type <- as.factor(spe$labels_singler)
+  plotCentroids(spe, colourBy = "cell_type", size = 0.5) +
+  scale_color_manual(values = color_vector) +
+  theme(
+    legend.key.width  = unit(0.5, "lines"),
+    legend.key.height = unit(1, "lines")
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))  +
+  scale_y_reverse()
+
 })
 
 
-imap(plots, function(plot, name){
-  # ggsave(paste0(pl_path,"spat_annotation/", name, "_singler_annot.png"), plot = plot, dpi = 700)
-  ggsave(paste0(pl_path,"spat_annotation/", name, "_singler_annot.png"), plot = plot, dpi = 700)
+iwalk(plots, function(plot, name){
+  ggsave(paste0(pl_path,"spat_annotation/", name, "_b1_miei.png"), 
+         plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
 })
 ```
 
@@ -107,9 +100,16 @@ iwalk(plots, function(plot, name){
 })
 ```
 
-### Divided by cell type
+## Divided by cell type
+
+### GRID
 ```{r}
-plot_grids <- imap(sr_spe_list, function(spe, spe_name) {
+cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
+
+# only myonuclei
+# (cell_types <- cell_types[startsWith(cell_types, 'Myonuclei')])
+
+plot_grids <- imap(spe_list_b1, function(spe, spe_name) {
   
   # Inner loop to create a list of plots for each cell type
   list_of_plots <- map(cell_types, function(type) {
@@ -120,26 +120,19 @@ plot_grids <- imap(sr_spe_list, function(spe, spe_name) {
     
     # 2. Programmatically create a new column named after the content of `type`.
     # For example, if type is "Endothelial", this creates spe_local$Endothelial
-    spe_local$is_here <- spe_local$labels_singler == type
+    spe_local$is_here <- as.factor(spe_local$labels_singler == type)
     
-    # 3. Call plotCoords, using the `type` variable as the column name string.
-    p <- plotCoords(
-      spe_local,
-      x_coord = "x",
-      y_coord = "y",
-      annotate = "is_here", # This now correctly refers to the new column
-      point_size = 0.05
-    ) +
-      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80"), name = "Present") +
-      labs(title = type) # The subplot title is still the cell type name
+    # 3. Call plotCentroids, using the `type` variable as the column name string.
+    p <- SpaceTrooper::plotCentroids(spe = spe_local, colourBy = "is_here") +
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80")) +
+      labs(title = type) + # The subplot title is the cell type name
+      scale_y_reverse()
     
     return(p)
   })
   
-  # --- The rest of your code is correct ---
-  
   # Combine the list of plots into a single grid
-  final_grid <- wrap_plots(list_of_plots, nrow = 3, ncol = 5, guides = "collect") &
+  final_grid <- wrap_plots(list_of_plots, nrow = 2, ncol = 4, guides = "collect") &
     theme(
       legend.key.width = unit(0.5, "lines"),
       legend.key.height = unit(1, "lines"),
@@ -152,15 +145,56 @@ plot_grids <- imap(sr_spe_list, function(spe, spe_name) {
   return(final_grid)
 })
 
-
+#grid saving
 iwalk(plot_grids, function(plot, name){
-  # ggsave(paste0(pl_path,"spat_annotation/by_type/", name, "_b1_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
-  ggsave(paste0(pl_path,"spat_annotation/by_type/", name, "_singler_annot.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+  ggsave(paste0(pl_path, "spat_annotation/by_type/", name, "_myo_b1_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
 })
 ```
 
+## Spatial relationship between trim and 2b myo
 
-## Barplot
+```{r}
+default_color <- "grey80"
+your_color_vector <- setNames(
+  rep(default_color, 16),
+  c("Endothelial", "FAPs", "Immune_Cells", "MuSC", "Myonuclei_IIx",
+    "Myonuclei_IIx_IIa", "Myonuclei_IIx_IIb", "Myonuclei_MTJ",
+    "Myonuclei_NMJ", "Nervous_System", "Pericyte",
+    "Smooth_Muscular", "Tenocyte",
+    "Myonuclei_IIb", "Myonuclei_Trim63")
+)
+
+cell_types_to_keep <- c("Myonuclei_IIb", "Myonuclei_Trim63")
+
+your_color_vector[cell_types_to_keep[1]] <- "red3"
+your_color_vector[cell_types_to_keep[2]] <- "blue"
+
+
+plots <- imap(spe_list_b1, function(spe, name){
+  spe$cell_type <- spe$labels_singler
+  # If a value in 'cell_type' is in our 'keep' list, we keep it. Otherwise, it becomes NA.
+  spe$cell_type <- as.factor(ifelse(spe$cell_type %in% cell_types_to_keep, # condition
+    as.character(spe_prova$cell_type), # if is true: Keep the original value (as character)
+    NA                                # otherwise: Replace with NA
+  ))
+  
+  plotCentroids(spe, colourBy = "cell_type", size = 0.3) +
+    scale_color_manual(values = your_color_vector, na.value = default_color) +
+    theme(
+      legend.key.width  = unit(0.5, "lines"),
+      legend.key.height = unit(1, "lines")
+    ) +
+    guides(color = guide_legend(override.aes = list(size = 5)))  +
+    scale_y_reverse()
+})
+
+iwalk(plots, function(plot, name){
+  #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_t_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+})
+```
+
+## Barplot proportions
 
 Spaceranger 
 ```{r}
@@ -246,7 +280,7 @@ ggplot(prop_df_ordered, aes(x = sample_id, y = proportion, fill = cell_type)) +
 ggsave(paste0(pl_path, "cell_type_proportions_b1_miei_vert.png"), width = 10, height = 6, dpi = 300)
 ```
 
-## Boxplot
+## Barplot stratified by sample
 
 ### Barplot cell type proportions stratified by sample
 
@@ -425,31 +459,34 @@ props_wide <- imap_dfr(sr_spe_list, function(spe, name) {
 
 ```{r}
 load(paste0(Rd_path, "annot_results_singleR_wilcox.RData"))
+save(ann_list_singler,file = paste0(Rd_path, "annot_results_singleR_wilcox.RData"))
+load(paste0(Rd_path, "annot_results_spaceranger_singleR_wilcox.RData"))
+save(ann_list_sr,file = paste0(Rd_path, "annot_results_spaceranger_singleR_wilcox.RData"))
 ```
 
 
 ```{r}
-plots <- imap(ann_list, function(ann_el, name) {plotScoreHeatmap(ann_el)})
+plots <- imap(ann_list_sr, function(ann_el, name) {plotScoreHeatmap(ann_el)})
 
-imap(plots, function(plot, name){
+iwalk(plots, function(plot, name){
   #ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, ".png"), plot = plot, dpi = 700)
-  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_mine.png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_spaceranger.png"), plot = plot, dpi = 700)
 })
 
 ```
 
 ### Grafico heatmap dei myonuclei 
 ```{r}
-labels_toplot <- unique(ann_list$blocco1_c26STAT3$labels)
+labels_toplot <- unique(ann_list_sr$blocco1_c26STAT3$labels)
 
-plots <- imap(ann_list, function(ann_el, name) {
+plots <- imap(ann_list_sr, function(ann_el, name) {
   plotScoreHeatmap(ann_el , 
                    labels.use = labels_toplot[startsWith(labels_toplot, "Myonuclei")])
   })
 
-imap(plots, function(plot, name){
+iwalk(plots, function(plot, name){
   #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
-  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_myonuclei.png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_myonuclei_spaceranger.png"), plot = plot, dpi = 700)
 })
 ```
 
@@ -464,7 +501,7 @@ plots <- imap(ann_list, function(ann_el, name) {
 
 imap(plots, function(plot, name){
   #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
-  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_altri.png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/diagnostic/heatmap/", name, "_altri.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
 })
 ```
 
@@ -473,11 +510,11 @@ imap(plots, function(plot, name){
 
 ```{r}
 
-plots <- imap(ann_list, function(ann_el, name) {plotDeltaDistribution(ann_el)})
+plots <- imap(ann_list_sr, function(ann_el, name) {plotDeltaDistribution(ann_el)})
 
-imap(plots, function(plot, name){
+iwalk(plots, function(plot, name){
   #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
-  ggsave(paste0(pl_path,"spat_annotation/diagnostic/delta_distribution/", name, ".png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/diagnostic/delta_distribution/", name, "_spaceranger.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
 })
 
 ```
@@ -485,7 +522,15 @@ imap(plots, function(plot, name){
 ### Markers heatmap per label
 
 ```{r}
-plotMarkerHeatmap(pred.ann_will, spe_list$blocco1_c26STAT3, "Myonuclei_IIx_IIb")
+plots <- map2(ann_list_b1, spe_list_b1, function(ann_el, spe) {
+  plotMarkerHeatmap(ann_el, spe, "MuSC")
+  })
+
+iwalk(plots, function(plot, name){
+  #ggsave(paste0(pl_path,"spat_annotation/Trim63vsIIb/", name, ".png"), plot = plot, dpi = 700)
+  ggsave(paste0(pl_path,"spat_annotation/diagnostic/markers_MuSC/", name, "_miei.png"), plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
+})
+
 ```
 
 ```{r}
