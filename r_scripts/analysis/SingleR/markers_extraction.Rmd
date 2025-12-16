@@ -1,0 +1,109 @@
+---
+title: "markers_extraction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(jsonlite)
+library(anndataR)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+# to read spatialdata objects
+library(ggnewscale)
+library(SpatialData)
+library(SingleCellExperiment)
+library(SingleR)
+library(scater)
+library(BiocParallel)
+library(writexl)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+# Single R annotation
+
+Define the paths
+```{r}
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+```
+
+```{r}
+spe_list <- readRDS(paste0(Rd_path, "spe_list_nuclei_ann"))
+sce_ref <- readRDS(ref_path)
+ann_list <- readRDS(paste0(Rd_path, "results_mia_segment_singleR_annot"))
+```
+
+# Markers list
+
+```{r}
+markers_lists <- map(ann_list_singler, function(ann_el) {
+  metadata(ann_el)$de.genes
+})
+head(markers_lists$blocco1_c26STAT3)
+markers_lists$blocco1_c26STAT3$MuSC
+```
+
+```{r}
+plotHeatmap(spe_list$blocco1_c26STAT3, order_columns_by="labels_singler",
+    features=unique(unlist(markers_lists$blocco1_c26STAT3$MuSC))) 
+```
+
+```{r}
+plots <- map2(spe_list, markers_lists, function(spe, markers) {
+    plotHeatmap(spe, order_columns_by="labels_singler",
+    features=unique(unlist(markers$MuSC))) +
+    labs(title = unique(spe$sample_id))
+  })
+```
+
+Estrazione markers per i seguenti tipi cellulari:
+ - MusC
+ - Immune system
+ - Myo NMJ (neuro muscolar junction)
+ - Myo IIb
+
+```{r}
+# 1. Define the specific keys you want to extract based on your code snippet
+target_cell_types <- c("MuSC", "Immune_cells", "Myonuclei_IIb", "Myonuclei_NMJ")
+
+# 1. Create the main dataframe (unnested)
+all_markers_df <- imap_dfr(markers_lists, function(sample_data, sample_name) {
+  
+  map_dfr(target_cell_types, function(cell_type) {
+    
+    markers <- sample_data[[cell_type]]
+    
+    if (is.null(markers) || length(markers) == 0) {
+      return(tibble())
+    }
+    
+    tibble(
+      Sample = sample_name,
+      Cell_Type = cell_type,
+      Marker = markers
+    )
+  })
+}) |> 
+  unnest(cols = Marker) # Flattens the list column into rows
+
+# 2. Split the dataframe by 'Sample' to create a list of dataframes
+# This creates the structure needed for multiple Excel sheets
+list_by_sample <- split(all_markers_df, all_markers_df$Sample)
+
+# 3. (Optional) Remove the 'Sample' column from inside the sheets 
+# since the sheet name already tells you which sample it is.
+list_by_sample <- map(list_by_sample, ~ select(.x, Cell_Type, Marker))
+
+# 4. Save to Excel
+# Each list item name becomes a Sheet Name
+write_xlsx(list_by_sample, path = paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_ann/markers_per_sample.xlsx"))
+```
+

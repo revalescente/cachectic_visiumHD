@@ -20,12 +20,12 @@ PROJECT_ROOT=$( realpath "$SCRIPT_DIR/../../../" )
 
 # Define the list of .zarr files to be processed.
 zarr_list=(
-"/mnt/europa/valerio/data/zarr_store/samples/blocco1_c26foxO.zarr"
-#"/mnt/europa/valerio/data/zarr_store/samples/blocco1_c26STAT3.zarr"
-#"/mnt/europa/valerio/data/zarr_store/samples/blocco1_sham.zarr"
-#"/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26murf1.zarr"
-# "/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26SMAD23.zarr"
-# "/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26.zarr"
+# "/mnt/europa/valerio/data/zarr_store/samples/blocco1_c26foxO.zarr"
+# "/mnt/europa/valerio/data/zarr_store/samples/blocco1_c26STAT3.zarr"
+# "/mnt/europa/valerio/data/zarr_store/samples/blocco1_sham.zarr"
+"/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26murf1.zarr"
+"/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26SMAD23.zarr"
+"/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26.zarr"
 # "/mnt/europa/valerio/data/zarr_store/samples/blocco3_c26murf1.zarr"
 # "/mnt/europa/valerio/data/zarr_store/samples/blocco3_c26STAT3.zarr"
 # "/mnt/europa/valerio/data/zarr_store/samples/blocco3_sham.zarr"

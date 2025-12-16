@@ -1,0 +1,95 @@
+---
+title: "singleR_wilcox_pipeline"
+output: html_document
+params:
+  saves_path_stem: "sr_nocell_expans"
+  labels_key: "labels_singler"
+  spe_key: "spaceranger_spe_nocell_expans"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(jsonlite)
+library(anndataR)
+library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+# to read spatialdata objects
+library(ggnewscale)
+library(SpatialData)
+library(SingleCellExperiment)
+library(SingleR)
+library(BiocParallel)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+# Single R annotation
+
+Define the paths
+```{r}
+pl_path = paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/SingleR_annot/", params$saves_path_stem,"/")
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+res_path = paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_ann/", params$saves_path_stem, "/")
+```
+
+Loading spatial experiment and single-cell reference and others
+```{r}
+spe_list <- readRDS(paste0(Rd_path, params$spe_key))
+(sce_ref <- readRDS(ref_path))
+```
+
+## Annotazione di tutti i campioni
+
+Aggiungo i logcounts nei campioni, utili per la rappresentazione più che altro
+```{r}
+spe_list <- imap(spe_list, \(spe, name){
+  spe <- scuttle::logNormCounts(spe)
+  spe})
+# saveRDS(spe_list, file = paste0(Rd_path, params$spe_key))
+```
+
+Avvio per tutti i campioni con wilcoxon de.method e 10 geni de.n
+```{r}
+ann_list <- imap(spe_list, function(spe, name){
+  pred.ann <- SingleR(test = spe, ref = sce_ref, de.method = "wilcox", labels = sce_ref$subclusters, BPPARAM=MulticoreParam(10))
+  pred.ann
+})
+
+saveRDS(ann_list, file = paste0(Rd_path,"results_", params$spe_key))
+```
+
+Aggiunta informazioni labels in spe_list
+```{r}
+lapply(ann_list, function(x) {base::table(x$labels)})
+spe_list <- map2(spe_list, ann_list, function(spe, ann) {
+  colData(spe)[[params$labels_key]] <- ann$labels
+  return(spe)
+})
+
+lapply(spe_list, function(x) {base::table(colData(x)[[params$labels_key]])})
+
+saveRDS(spe_list, file = paste0(Rd_path, params$spe_key))
+
+```
+
+Salvo le liste dei risultati di SingleR
+```{r}
+
+labels_df <- imap_dfr(spe_list, function(spe, name) {
+  data.table(
+    labels = colData(spe)[[params$labels_key]],
+    sample_id = name, # Include the list element name
+    cell_id = colData(spe)[["cell_id"]]
+  )
+})
+
+# export labels as csv
+write.csv(labels_df, file = paste0("/mnt/europa/valerio/data/data_tables/", params$labels_key, ".csv"), row.names = FALSE)
+```

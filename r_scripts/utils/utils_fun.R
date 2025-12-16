@@ -1,13 +1,15 @@
 library(purrr)
 library(ggplot2)
+library(SpatialExperiment)
+library(scuttle)
 
 # negate a statement ----
 `%nin%` <- negate(`%in%`)
 
 # dot plot ----
-dot_plot_paper <- function(df)
-{
-  p1 <- ggplot(df, aes(x = gene, y = celltype)) +
+dot_plot_paper <- function(df) {
+  df <- df[df$pct_expr_combat > 0, ]  # Filter out zero values
+  p <- ggplot(df, aes(x = gene, y = celltype)) +
     geom_point(aes(size = pct_expr_combat, color = avg_expr_combat)) +
     scale_color_gradient(low = "grey", high = "red") +
     theme_bw() +
@@ -22,8 +24,39 @@ dot_plot_paper <- function(df)
       axis.text.y = element_text(size = 10),
       panel.grid.major = element_line(color = "grey90")
     )
-  return(p1)
+  return(p)
 }
+
+# marker dot plot
+
+dot_plot_marker <- function(df, gene_to_plot) {
+  
+  # 1. Filter for the specific gene passed to the function
+  df_filtered <- df[df$gene == gene_to_plot, ]
+  
+  # 2. Filter out rows where the expression percentage is zero (as preferred)
+  df_filtered <- df_filtered[df_filtered$pct_expr > 0, ]
+  
+  # 3. Build the plot with the new aesthetics and labels
+  p <- ggplot(df_filtered, aes(x = celltype, y = condition)) +
+    geom_point(aes(size = pct_expr, color = avg_expr)) +
+    scale_color_gradient(low = "grey", high = "red") +
+    labs(
+      title = gene_to_plot, 
+      y = "Condition", 
+      x = "Cell type",
+      color = "Avg expression", 
+      size = "% expr >0"
+    ) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  # --- Modifications End ---
+  
+  return(p)
+}
+
+
 
 # custom spatialQC metrics ----
 
@@ -31,14 +64,14 @@ vHD_spatialPerCellQC <- function(spe, micronConvFact=0.316, rmZeros=TRUE, ...) {
   stopifnot(is(object=spe, "SpatialExperiment"))
   
   is.mito <- BiocGenerics::grep("^mt-", BiocGenerics::rownames(spe), ignore.case = TRUE)
-  spe <- addPerCellQC(spe, subsets = list(Mito = is.mito), ...)
+  spe <- scuttle::addPerCellQC(spe, subsets = list(Mito = is.mito), ...)
 
-  if(!all(spatialCoordsNames(spe) %in% names(colData(spe)))) {
+  if(!all(SpatialExperiment::spatialCoordsNames(spe) %in% names(colData(spe)))) {
     colData(spe) <- cbind.DataFrame(colData(spe), spatialCoords(spe))
   }
 
   spnc <- spatialCoords(spe) * micronConvFact
-  colnames(spnc) <-  paste0(spatialCoordsNames(spe), "_um")
+  colnames(spnc) <-  paste0(SpatialExperiment::spatialCoordsNames(spe), "_um")
   colData(spe) <- cbind.DataFrame(colData(spe), spnc)
   spe$Area_um <- spe$area * (micronConvFact^2)
   spe$AspectRatio <- spe$major_axis_length/spe$minor_axis_length
@@ -83,3 +116,38 @@ mappingLabels <- function(spe_list, ann_list) {
   return(spe_list)
 }
 
+# reading polygons from parquet file to sf objects
+read_shapes <- function(poly_path, samples, shape_name = "nuclei_boundaries"){
+  poly_list <- map(samples, function(sample){
+    poly <- st_read_parquet(paste0(poly_path, sample, ".zarr/shapes/", shape_name,"/shapes.parquet"))
+    names(poly)[names(poly) == "X__index_level_0__"] <- "cell_id"
+    rownames(poly) <- poly$cell_id
+    poly
+  })
+}
+
+# adding polygons to spe_obj
+add2sfe <- function(spe_obj, polygons, MARGIN = NULL, name = "filtered_nuclei"){
+  # filtering nuclei in the sample and reordering
+  target_ids <- colData(spe_obj)[["cell_id"]]
+  
+  # Subset poly_list$blocco1_c26STAT3 to only rows with cell_id in target_ids
+  keep <- polygons$cell_id %in% target_ids
+  poly_filtered <- polygons[keep, ]
+  
+  # Reorder so cell_id matches order in target_ids
+  ord <- match(target_ids, poly_filtered$cell_id)
+  poly_filtered <- poly_filtered[ord, ]
+  
+  # (Optional) assign rownames to match colnames of spe_obj
+  rownames(poly_filtered) <- colnames(spe_obj)
+  
+  # (Optional) check alignment
+  stopifnot(all(poly_filtered$cell_id == target_ids))
+  
+  # add to the sfe
+  # MARGIN: 1 = righe (geni)
+  #         2 = colonne (nuclei)
+  dimGeometry(spe_obj, name,  MARGIN = MARGIN) <- poly_filtered
+  return(spe_obj)
+}

@@ -1,6 +1,10 @@
 ---
 title: "Plots of genes that determine the identity of the cell types"
 output: html_document
+params:
+  saves_path_stem: "my_segmentation/filtered/identity_genes"
+  labels_key: "labels_singler"
+  spe_key: "pseudobulk_celltype_SingleR_wb7_wdiscard"
 ---
 
 
@@ -34,37 +38,26 @@ NB: i geni che funzionano in interazione a due li ho proiettati cmq separatament
 
 Paths
 ```{r}
-pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/singler_annot/identity_genes/"
+pl_path = paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/SingleR_annot/", params$saves_path_stem,"/")
 Rd_path = "/mnt/europa/valerio/data/Rdata/"
 ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
-res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/DGE_singleR/"
+res_path = paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_annot/", params$saves_path_stem, "/")
 ```
 
 Utilizziamo l'oggetto pseudobulk raggruppato per tipi cellulari
 
 ```{r}
-load("/mnt/europa/valerio/data/Rdata/pseudobulk_celltype_SingleR.RData")
+pb_ct <- readRDS(paste0(Rd_path, params$spe_key))
+gene_list <- read.table("/mnt/europa/valerio/repositories/cachetic_visiumHD/json/identity_genes.txt", header = FALSE)[[1]] |> as.character()
 ```
 
-# DOTPLOT su LISTA RIDOTTA  (???)
+# Dotplot
 
- da grafico 1k articolo Camilla
+## All cell types and tissue types
 
-## Correggo effetto di batch - DA TOGLIERE!!
+da grafico 1k articolo Camilla
 
-```{r}
-# batch è la colData tissue_type
-# table(pb_ct$tissue_type)
-
-expr_combat <- ComBat(
-  dat = as.matrix(assay(pb_ct, "logcounts")),  # matrice numerica
-  batch = pb_ct$tissue_type,
-  par.prior = TRUE,
-  prior.plots = FALSE
-)
-```
-
-## Aggrego i mionuclei
+Aggrego i mionuclei
 
 ```{r}
 pb_ct$cell_type <- pb_ct$labels_singler
@@ -76,19 +69,21 @@ colData(pb_ct)$clusters <- ifelse(
 colData(pb_ct)$clusters <- factor(colData(pb_ct)$clusters)
 ```
 
-Definisco un sottoinsieme dei geni d'interesse
-
-```{r}
-sub_geni <- c("Ttn","Pdgfra","Dcn","Myh11","Trpc3","Cacna1c","Col11a1","Mkx","Col1a1","Ptprc",
-              "F13a1","Itgam","Pax7","Kcna1","Matn2","Mbp","Mpz","Prx","Cadm1","Reln","Mmrn1",
-              "Pecam1","Kdr")
-```
-
 Dataframe per i grafici
 
 ```{r}
-df <- as.data.frame(t(expr_combat[sub_geni, , drop=FALSE])) |> 
-  mutate(celltype = colData(pb_ct)$clusters)
+if (!"logcounts" %in% assayNames(pb_ct)) {
+  message("'logcounts' assay not found. Calculating log-normalized counts...")
+  pb_ct$sizeFactor <- NULL
+  pb_ct <- scuttle::logNormCounts(pb_ct)
+}
+
+# 2. Now proceed with the extraction, knowing logcounts exists
+df <- as.data.frame(t(logcounts(pb_ct)[gene_list, , drop=FALSE])) |> 
+  mutate(
+    celltype = colData(pb_ct)$clusters,
+    sample_id = colData(pb_ct)$sample_id
+  )
 ```
 
 
@@ -96,7 +91,7 @@ df <- as.data.frame(t(expr_combat[sub_geni, , drop=FALSE])) |>
 # calcolo media e percentuale per ogni celltype × gene
 
 dot_data <- df |> 
-  pivot_longer(cols = all_of(sub_geni), 
+  pivot_longer(cols = all_of(gene_list), 
                names_to = "gene", values_to = "expr") |> 
   group_by(celltype, gene) |> 
   summarise(
@@ -105,22 +100,22 @@ dot_data <- df |>
     .groups = "drop"
   )
 
-p1 <- dot_plot_paper(dot_data)
+p1 <- dot_plot_paper(dot_data) +
+        labs(title = "Dotplot all cell types and tissue types")
 
-ggsave(paste0(pl_path, "DotPlot_completo.png"), plot = p1, width = 8, height = 6, dpi = 300)
-#comunque sono i BIN, per questo sarà molto sporco anche se corretto x batch
+ggsave(paste0(pl_path, "DotPlot_completo.png"), plot = p1, width = 8, height = 6, dpi = 400, create.dir = TRUE)
 ```
 
-## Solo mionuclei ------------------------------------------------------------------------------
+## Solo mionuclei
 
 ```{r}
-genes_mio <- c("Ttn","Myh4","Myh1","Myh2","Col22a1","Ache","Etv5")
+genes_mio <- c("Ttn","Myh4","Myh1","Myh2","Col22a1","Ache","Etv5", "Ano4", "Trim63")
 cells_sel <- pb_ct$cell_type %in% c("Myonuclei_IIb","Myonuclei_IIx","Myonuclei_IIx_IIa",
                                      "Myonuclei_IIx_IIb","Myonuclei_MTJ","Myonuclei_NMJ",
                                      "Myonuclei_Trim63")
 
 
-df <- as.data.frame(t(expr_combat[, cells_sel])) |> 
+df <- as.data.frame(t(logcounts(pb_ct)[, cells_sel])) |> 
   mutate(sample = colData(pb_ct)[cells_sel,]$sample_id,
          celltype = colData(pb_ct)[cells_sel,]$cell_type)
 
@@ -134,15 +129,82 @@ dot_data <- df |>
     .groups = "drop"
   )
 
-p2 <- dot_plot_paper(dot_data)
+p2 <- dot_plot_paper(dot_data) +
+        labs(title = "Dotplot only Myonuclei")
 
 ggsave(paste0(pl_path, "DotPlot_Myonuclei.png"), plot = p2, width = 6, height = 5, dpi = 300)
 
 ```
 
-# Visualizzazione nel tessuto con scale separate (no confronto)
+# ------------------------------------------------------------------------------
+
+# Solo c26 e sham 
+
+## All cell types and tissue types
 
 ```{r}
+pb_sub <- pb_ct[,pb_ct$tissue_type %in% c("c26","sham")]
+colData(pb_sub)$clusters <- ifelse(
+  grepl("^Myonuclei", colData(pb_sub)$cell_type),
+  "Myonuclei",
+  as.character(colData(pb_sub)$cell_type)
+)
+colData(pb_sub)$clusters <- factor(colData(pb_sub)$clusters)
+
+df <- as.data.frame(t(logcounts(pb_sub)[gene_list, , drop=FALSE])) 
+df$celltype <- colData(pb_sub)$clusters  
+df_long <- pivot_longer(df, cols = all_of(gene_list),
+                        names_to = "gene", values_to = "expr")
+
+dot_data <- df_long %>%
+  group_by(celltype, gene) %>%
+  summarise(
+    pct_expr_combat = sum(expr > 0) / n() * 100,
+    avg_expr_combat = mean(expr[expr > 0], na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+(p3 <- dot_plot_paper(dot_data)) +
+        labs(title = "Dotplot all cell types - only c26 and sham")
+
+ggsave(paste0(pl_path, "DotPlot_completo_only_c26&sham.png"), plot = p1, width = 8, height = 6, dpi = 400)
+```
+
+## Solo mionuclei
+
+```{r}
+genes_mio <- c("Ttn","Myh4","Myh1","Myh2","Col22a1","Ache","Etv5", "Ano4", "Trim63")
+cells_sel <- pb_sub$cell_type %in% c("Myonuclei_IIb","Myonuclei_IIx","Myonuclei_IIx_IIa",
+                                     "Myonuclei_IIx_IIb","Myonuclei_MTJ","Myonuclei_NMJ",
+                                     "Myonuclei_Trim63")
+
+df <- as.data.frame(t(logcounts(pb_sub)[, cells_sel])) |> 
+  mutate(sample = colData(pb_sub)[cells_sel,]$sample_id,
+         celltype = colData(pb_sub)[cells_sel,]$cell_type)
+
+dot_data <- df |> 
+  pivot_longer(cols = all_of(genes_mio), 
+               names_to = "gene", values_to = "expr") |> 
+  group_by(celltype, gene) |> 
+  summarise(
+    pct_expr_combat = sum(expr > 0) / n() * 100,
+    avg_expr_combat = mean(expr[expr > 0], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+p4 <- dot_plot_paper(dot_data) +
+        labs(title = "Dotplot only Myonuclei - only c26 vs sham")
+
+ggsave(paste0(pl_path, "DotPlot_Myonuclei_only_c26&sham.png"), plot = p2, width = 6, height = 5, dpi = 400)
+
+```
+
+
+# Visualizzazione nel tessuto con scale separate (no confronto)
+
+```{r eval=FALSE, include=FALSE}
 load("subset_list.RData")
 data <- read.table("identity_genes_plots.txt")
 vec <- as.vector(data)

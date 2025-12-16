@@ -3,6 +3,10 @@ title: "Single nuclei annotation"
 output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
 ```{r library, message=FALSE, warning=FALSE, include=FALSE}
 library(purrr)
 library(ggplot2)

@@ -29,10 +29,10 @@ source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils
 
 Paths
 ```{r}
-pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/singler_annot/spaceranger/"
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/singler_annot/spaceranger_nocell/"
 Rd_path = "/mnt/europa/valerio/data/Rdata/"
 ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
-res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_ann/spaceranger/"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/SingleR_ann/spaceranger_nocell/"
 ```
 
 Loading spatial experiment and single-cell reference and others

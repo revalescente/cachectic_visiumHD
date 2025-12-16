@@ -4,6 +4,8 @@ import pandas as pd
 from skimage.measure import regionprops_table
 import py_scripts.segmentation.segm_functions as sf
 
+# TO CHECK BEFORE RUNNING AGAIN, nuclei are in hires scale, not fullres! (so they are smaller, transform to coord sys fullres before use!)
+
 sdata = sd.read_zarr("/mnt/europa/valerio/data/zarr_store/spaceranger_v4/samples/blocco1_sham")
 
 

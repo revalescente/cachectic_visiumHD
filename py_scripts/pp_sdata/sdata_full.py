@@ -22,18 +22,17 @@ import py_scripts.pp_sdata.pp_functions as pp
 # read data with io_reader
 block_numbers = [1, 2, 3, 4, 5, 6, 7, 9]
 # block_numbers = [4, 7, 9]
-spe_blocks = {}
+sdata_list = {}
 
 for i in block_numbers:
-    block_name = f"spe_blocco{i}"
-    spe_blocks[block_name] = visium_hd(
-        path=f"/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out/blocco{i}/outs",
+    block_name = f"blocco{i}"
+    sdata_list[block_name] = visium_hd(
+        path=f"/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_3.1/blocco{i}/outs",
         dataset_id=f"blocco{i}",
         filtered_counts_file=False,
-        bin_size='002',
+        bin_size=['008','016'],
         bins_as_squares=True,
         annotate_table_by_labels=False,
-        fullres_image_file=f"/mnt/europa/valerio/HE_images/color_corrected/pp_blocco{i}_20x.tif",
         load_all_images=False,
         var_names_make_unique=True
     )

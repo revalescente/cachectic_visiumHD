@@ -18,18 +18,18 @@
     },
     "blocco2": {
         "c26": {
-            "min_coordinate": [0, 0],
-            "max_coordinate": [21414, 7200],
+            "min_coordinate": [0,13000],
+            "max_coordinate": [21414, 20069],
             "sample_key": "blocco2_c26"
         },
         "c26murf1": {
-            "min_coordinate": [0, 6500],
-            "max_coordinate": [21414, 12000],
+            "min_coordinate": [0, 8750],
+            "max_coordinate": [21414, 13750],
             "sample_key": "blocco2_c26murf1"
         },
         "c26SMAD23": {
-            "min_coordinate": [0, 11500],
-            "max_coordinate": [21414, 20069],
+            "min_coordinate": [0, 0],
+            "max_coordinate": [21414, 8750],
             "sample_key": "blocco2_c26SMAD23"
         }
     },

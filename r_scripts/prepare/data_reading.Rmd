@@ -1,0 +1,590 @@
+---
+title: "Data reading"
+author: "Valerio Reffo"
+date: "2025-09-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(jsonlite)
+library(purrr)
+library(dplyr)
+library(scuttle)
+library(SpatialExperiment)
+library(SpatialFeatureExperiment)
+library(sf)
+library(sfarrow)
+# to read spatialdata objects
+library(ggnewscale)
+#library(SpatialData)
+library(SingleCellExperiment)
+library(anndataR)
+source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+```
+
+Paths
+```{r}
+#pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/cell_dec/"
+Rd_path = "/mnt/europa/valerio/data/Rdata/"
+zarr_path = "/mnt/europa/shared/sandri_visiumHD_data/bins/"
+#ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
+#res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/DEC_ANN/"
+poly_path = "/mnt/europa/valerio/data/zarr_store/samples/"
+sr_path = "/mnt/europa/valerio/data/zarr_store/adatas/spaceranger_tables/"
+```
+
+# Concatenated samples
+
+Al momento non è disponibile un file concatenato perché non riesco a farlo funzionare in python. Si può fare da R molto più tranquillamente.
+```{r concat_data}
+#(sdata <- readSpatialData("/mnt/europa/valerio/data/zarr_store/concat_all_samples_almost.zarr", anndataR=TRUE))
+```
+
+# List of all samples
+
+This dictionary has all the info needed to read the data
+```{r samples_dict, include=FALSE}
+samples_dict <- fromJSON("/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json")
+```
+
+Vector with samples name
+```{r }
+samples_key <- lapply(samples_dict, function(blocco) {
+  lapply(blocco, function(sample) {
+    return(sample$sample_key)
+  })
+}) |> unlist(use.names = FALSE)
+samples_key
+```
+
+```{r reading_function, include=FALSE}
+read_samples_list <- function(samples)
+{
+  spe_list <- lapply(samples, function(sample) {
+    sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/samples/", sample, ".zarr"), anndataR=TRUE)
+    tables(sdata)$nuclei_counts
+  })
+  names(spe_list) = samples
+  return(spe_list)
+}
+```
+
+```{r samples_list}
+sdata_list = read_samples_list(samples_key)
+sdata_list
+```
+
+Per i dati in shared 
+```{r}
+read_shared_samples_list <- function(samples)
+{
+  spe_list <- lapply(samples, function(sample) {
+    sdata <- readSpatialData(paste0(zarr_path, sample), anndataR=TRUE)
+    tables(sdata)$nuclei_counts
+  })
+  names(spe_list) = samples
+  return(spe_list)
+}
+```
+
+```{r}
+sr_list = read_shared_samples_list(samples_key)
+```
+
+# ------------------------------------------------------------------------------
+
+## Preparation of the different objects
+
+## Single Cell Experiment
+
+```{r}
+read_samples_adatas <- function(samples, data_path = "/mnt/europa/valerio/data/zarr_store/adatas/samples_adata/")
+{
+  sce_list <- lapply(samples, function(sample) {
+    h5ad_path <- paste0(data_path, sample, ".h5ad")
+    sce <- read_h5ad(h5ad_path, to = "SingleCellExperiment")
+    blocco <- strsplit(sample, "_")[[1]][1]
+    sampletype <- strsplit(sample, "_")[[1]][2]
+    sce$blocco <- blocco
+    sce$sampletype <- sampletype
+    sce$ncounts <- colSums(assay(sce))
+    sce$ngenes <- Matrix::colSums(assay(sce) > 0)
+    sce$sample_id <- sample
+    sce
+  })
+  names(sce_list) = samples
+  return(sce_list)
+}
+```
+
+```{r}
+sce_list = read_samples_adatas(samples_key)
+#sce_list
+```
+
+Filtering low count nuclei
+```{r}
+
+# for(nm in names(sce_list)) {
+#   sce_list[[nm]] <- sce_list[[nm]][, colData(sce_list[[nm]])$ncounts >= quantile(colData(sce_list[[nm]])$ncounts, 0.05) &
+#                        colData(sce_list[[nm]])$ngenes >= quantile(colData(sce_list[[nm]])$ngenes, 0.05)]
+# }
+```
+
+## Single sce object
+
+```{r}
+sce_merged <- do.call(cbind, sce_list)
+sce_merged
+```
+
+Ok le dimensioni corrispondono
+
+```{r}
+sum(sapply(sce_list, ncol))
+dim(sce_merged)
+```
+
+
+## Pseudobulk
+
+```{r}
+sce2pb <- \(sce_list) {
+  pb_list <- lapply(sce_list, function(sce) {
+  scuttle::aggregateAcrossCells(sce, ids = colData(sce)$tissue_type, use.assay.type = "X")
+  })
+  all_counts <- do.call(cbind, lapply(pb_list, assay))
+  all_colData <- do.call(rbind, lapply(pb_list, colData))
+  final <- SingleCellExperiment(assays=list(counts=all_counts), colData=all_colData)
+  return(final)
+}
+```
+
+```{r}
+pb <- sce2pb(sce_list)
+```
+
+### Psuedobulk dalla lista di spe
+
+Procedo a rifare i pb senza blocco 7 e filtrando i "to_discard" e raggruppato per cell type
+
+```{r}
+# 1. Filter the list to remove samples starting with "blocco7"
+# grep(..., invert = TRUE) returns indices/names that DO NOT match the pattern
+spe_list_clean <- spe_list[grep("^blocco7", names(spe_list), invert = TRUE)]
+
+# 2. Iterate over the remaining list to filter spots where to_discard is TRUE
+spe_list_clean <- lapply(spe_list_clean, function(spe) {
+  # Keep columns where to_discard is FALSE (or NA, usually safe to treat NA as FALSE here or handle explicitly)
+  spe[, !spe$to_discard]
+})
+
+# 3. Create Pseudobulk object
+# First, we usually need to combine the list into a single SingleCellExperiment/SpatialExperiment
+# to perform aggregation across the whole dataset efficiently.
+spe_combined <- do.call(cbind, spe_list_clean)
+
+# 4. Aggregate (Pseudobulk) by "labels_singler" and "sample_id"
+# We usually group by Sample AND Cell Type to get pseudobulk profiles per sample-celltype pair.
+# If you only group by 'labels_singler', you will average across ALL samples (which is rarely the goal).
+# Assuming 'sample_id' is the column identifying the sample name in colData.
+
+# Define the grouping factors
+ids <- colData(spe_combined)[, c("labels_singler", "sample_id")]
+
+# Perform the aggregation (summing counts is standard for pseudobulk)
+pb_spe <- aggregateAcrossCells(spe_combined, ids = ids)
+```
+
+
+## Spatial data
+
+Aggiungo spatial coordinates ai sce
+
+```{r}
+spatialc <- read.csv("/mnt/europa/valerio/data/data_tables/spatial_coords.csv", sep=",", header = FALSE)
+colnames(spatialc) <- c("y", "x")
+spatialc$sample_id <- sce_merged$sample_id
+head(spatialc)
+dim(spatialc)
+dim(sce_merged)
+dim(spatialc)[1] == dim(sce_merged)[2]
+```
+
+### Spatial experiment merged
+```{r}
+sce_merged$x <- spatialc$x
+sce_merged$y <- spatialc$y
+(spe_merged <- toSpatialExperiment(sce_merged,
+    spatialCoordsNames = c("y", "x")))
+```
+
+### Spatial experiment list
+
+```{r}
+add_spatial_coords <- function(sce_list, spatial_coords, sample_col = "sample_id") {
+  lapply(sce_list, function(sce) {
+    # Identify the sample id for this SCE
+    sample_id <- unique(colData(sce)[[sample_col]])
+    # Subset spatialc for this sample
+    spatial_sub <- spatial_coords[spatial_coords[[sample_col]] == sample_id, ]
+    # Add x and y to colData
+    colData(sce)$x <- spatial_sub$x
+    colData(sce)$y <- spatial_sub$y
+    return(sce)
+  })
+}
+```
+
+Let's add spatial coordinates to every element of sce_list
+```{r}
+sce_list <- add_spatial_coords(sce_list, spatialc, sample_col = "sample_id")
+sapply(sce_list, function(sce) all(c("x", "y") %in% colnames(colData(sce))))
+```
+
+Convert to spe
+```{r}
+spe_list <- lapply(sce_list, function(sce) {
+  toSpatialExperiment(sce, spatialCoordsNames = c("y", "x"))
+})
+```
+
+
+## Spe grouped by sampletypes
+
+```{r}
+# Get the unique sample types
+sampletypes <- unique(spe_merged$sampletype)
+
+# Create a list with one SpatialExperiment per sample type
+spe_st <- lapply(sampletypes, function(st) {
+  spe_merged[, colData(spe_merged)$sampletype == st]
+})
+
+# Optionally, name the list
+names(spe_st) <- sampletypes
+```
+
+# spe_merged without blocco7
+
+Devo togliere b7 e aggiungere il vettore cell_type e tissue_type agli spe_merged e poi ricreare lo pseudo bulk. Inoltre anche in_tissue così i grafici non stressano
+
+```{r}
+# 1) Costruisci la tabella mapping da spe_list
+mapping_df <- imap_dfr(spe_list_wb7, function(spe, name) {
+  cd <- as.data.frame(colData(spe))
+  # assicurati che le colonne esistano e siano character (evita factor surprises)
+  if (!("cell_id" %in% names(cd))) stop("In spe_list[['", name, "']] manca la colonna 'cell_id'")
+  if (!("cell_type" %in% names(cd))) stop("In spe_list[['", name, "']] manca la colonna 'cell_type'")
+
+  tibble(
+    sample_id = name,
+    cell_id   = as.character(cd$cell_id),
+    cell_type = as.character(cd$cell_type)
+  )
+})
+
+# 2) Controlli rapidi: duplicati o mismatch
+dups <- mapping_df |> 
+  count(sample_id, cell_id)  |> 
+  filter(n > 1)
+
+if (nrow(dups) > 0) {
+  stop("Trovati duplicati in mapping_df per sample_id+cell_id: controlla i seguenti (esempi):\n",
+       paste(utils::head(paste0(dups$sample_id, "/", dups$cell_id), 10), collapse = ", "))
+}
+
+# 3) Prepara il colData di spe_merged come data.frame
+
+# 4) Left join per ottenere cell_type allineato all'ordine di spe_merged
+cd_joined <- as.data.frame(colData(spe_merged))  |> 
+  mutate(sample_id = as.character(sample_id),
+         cell_id   = as.character(cell_id)) |> 
+  left_join(mapping_df, by = c("sample_id", "cell_id"))
+
+# 5) Verifiche: tutte le righe hanno un valore corrispondente?
+missing_n <- sum(is.na(cd_joined$cell_type))
+if (missing_n > 0) {
+  warning(sprintf("Attenzione: %d colonne in spe_merged non hanno corrispondenza in mapping_df (cell_type NA).",
+                  missing_n))
+  # se vuoi fermare in caso di mismatch, usa stop() invece di warning()
+}
+
+# 6) Assegna in un'unica operazione al colData
+colData(spe_merged)$cell_type <- cd_joined$cell_type
+
+# 7) (Opzionale) converti in factor con livelli coerenti se vuoi
+all_levels <- unique(na.omit(mapping_df$cell_type))
+colData(spe_merged)$cell_type <- factor(colData(spe_merged)$cell_type, levels = all_levels)
+
+spe_merged$tissue_type <- spe_merged$sampletype
+spe_merged$sampletype <- NULL
+spe_merged$in_tissue <- TRUE
+spe_merged_wb7 <- spe_merged[, spe_merged$blocco %nin% "blocco7"]
+```
+
+# spe_list without blocco 7 and coldata corrected
+
+```{r}
+spe_list_wb7 <- spe_list[!startsWith(names(spe_list), "blocco7_")]
+```
+
+Cambio il nome della colonna sampletype in tissue_type, cosi siamo uguali a emma
+e aggiungo 
+```{r}
+spe_list_wb7 <- imap(spe_list_wb7, function(spe, name) {
+  spe$tissue_type = spe$sampletype
+  spe$sampletype = NULL
+  spe$in_tissue <-  TRUE
+  spe
+})
+```
+
+```{r}
+spe_list <- imap(spe_list, function(spe, name) {
+  spe$tissue_type = spe$sampletype
+  spe$sampletype = NULL
+  spe$in_tissue <-  TRUE
+  spe
+})
+```
+
+
+# Pseudobulk without blocco 7
+
+Creiamo oggetto pseudobulk per i vari cell_type
+```{r}
+# Create pseudo-bulk for each cell_type in each sample
+pb_ct_wb7 <- aggregateAcrossCells(spe_merged_wb7, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_wb7$cell_type,
+                                             sample = spe_merged_wb7$sample_id))
+pb_ct_wb7  <- logNormCounts(pb_ct_wb7,  assay.type = "X") #altre normalizzazioni?
+(colnames(pb_ct_wb7) <- paste(pb_ct_wb7$cell_type, pb_ct_wb7$sample_id, sep = "_"))
+```
+
+Rifaccio pseudobulk per tissue_type (aka sampletype) e tolgo blocco 7
+```{r}
+pb_tt_wb7 <- aggregateAcrossCells(spe_merged_wb7, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_wb7$tissue_type,
+                                             sample = spe_merged_wb7$sample_id))
+pb_tt_wb7  <- logNormCounts(pb_tt_wb7,  assay.type = "X") #altre normalizzazioni?
+(colnames(pb_tt_wb7) <- pb_tt_wb7$sample_id)
+```
+
+# rifaccio gli oggetti spe_merged e pb con l'annotazione SingleR
+
+```{r}
+load(paste0(Rd_path, 'spe_list_nuclei_ann.RData'))
+```
+
+## Spe merged
+```{r}
+spe_merged_sr <- do.call(cbind, spe_list_up)
+```
+
+without blocco 7
+```{r}
+spe_list_up_wb7 <- spe_list_up[!startsWith(names(spe_list_up), "blocco7_")]
+spe_merged_sr_wb7 <- do.call(cbind, spe_list_up_wb7)
+```
+
+## Pseudobulk SingleR
+
+Creiamo oggetto pseudobulk per i vari cell_type
+```{r}
+pb_ct <- aggregateAcrossCells(spe_merged_sr, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_sr$labels_singler,
+                                             sample = spe_merged_sr$sample_id))
+pb_ct  <- logNormCounts(pb_ct,  assay.type = "X") 
+colnames(pb_ct) <- paste(pb_ct$labels_singler, pb_ct$sample_id, sep = "_")
+```
+
+without blocco 7
+```{r}
+pb_ct_wb7 <- aggregateAcrossCells(spe_merged_sr_wb7, use.assay.type = "X",
+                                id=DataFrame(label = spe_merged_sr_wb7$labels_singler,
+                                             sample = spe_merged_sr_wb7$sample_id))
+pb_ct_wb7  <- logNormCounts(pb_ct_wb7,  assay.type = "X") 
+colnames(pb_ct_wb7) <- paste(pb_ct_wb7$labels_singler, pb_ct_wb7$sample_id, sep = "_")
+```
+
+# Spaceranger segmentation data reading 
+
+Select the first blocco
+```{r}
+#(samples_b1 <- samples_key[startsWith(samples_key, "blocco1_")])
+samples_2 <- samples_key[stringr::str_detect(samples_key, "^blocco[12]")]
+```
+
+
+```{r reading_function, include=FALSE}
+read_samples_list <- function(samples)
+{
+  spe_list <- map(samples, function(sample) {
+    sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/spaceranger_v4/no_cell_expans/samples/", sample), anndataR=TRUE)
+    sdata
+  })
+  names(spe_list) = samples
+  return(spe_list)
+}
+```
+
+```{r samples_list}
+sr_list = read_samples_list(samples_2)
+sr_list
+```
+
+Extract tables and create spatial experiment
+```{r}
+sr_spe_list <- imap(sr_list, function(sdata, name){
+  sce <-  sdata$tables$segmentation_counts
+  spe <- toSpatialExperiment(sce, spatialCoordsNames = c("x", "y"))
+  # rename assay counts
+  assayNames(spe)[assayNames(spe) == "X"] <- "counts"
+  # filter nuclei with zero counts
+  spe <- spe[, colSums(counts(spe)) > 0]
+  spe
+})
+sr_spe_list
+
+```
+
+## Spaceranger reading from adata
+
+```{r}
+read_adatas_list <- function(samples)
+{
+  adata_list <- map(samples, function(sample) {
+    adata <- read_h5ad(paste0(sr_path, sample, ".h5ad"),   to = "SingleCellExperiment")
+    adata
+  })
+  names(adata_list) = samples
+  return(adata_list)
+}
+```
+
+```{r}
+sr_list = read_adatas_list(samples_2)
+sr_list
+```
+Correct the sr_list to become spatialExperiments
+```{r}
+sr_spe_list <- imap(sr_list, function(sce, name){
+  spe <- toSpatialExperiment(sce, spatialCoordsNames = c("x", "y"))
+  # rename assay counts
+  assayNames(spe)[assayNames(spe) == "X"] <- "counts"
+  # filter nuclei with zero counts
+  spe <- spe[, colSums(counts(spe)) > 0]
+  spe
+})
+sr_spe_list
+```
+
+# Add labels of RCTD doublet into the spe_list_up where all info are stored togheter
+
+I need to add the column in the spe list but the blocco7 wasn't annotated so let's skip them. A for loop is more handly.
+
+```{r}
+spe_list_up<- mappingLabels(spe_list_up, ann_list_RCTD)
+```
+
+# Spatial Feature Experiment
+
+Let's try to convert from SpatialExperiment a single sample
+```{r}
+# sfe_prova <- toSpatialFeatureExperiment(spe_prova)
+# 
+# # Read the nuclei, they are here:
+# # "/mnt/europa/valerio/data/zarr_store/samples/blocco1_c26STAT3.zarr/shapes/filtered_nuclei/shapes.parquet"
+# # Read the Parquet file into a dataframe/tibble
+# poly <- st_read_parquet("/mnt/europa/valerio/data/zarr_store/samples/blocco1_c26STAT3.zarr/shapes/filtered_nuclei/shapes.parquet")
+# poly$cell_id <- poly$index_left
+# poly$index_left <- NULL
+# poly
+# 
+# # filtering nuclei in the sample and reordering
+# poly_filtered <- poly |>
+#   filter(cell_id %in% sfe$cell_id) |>
+#   slice(match(sfe$cell_id, cell_id))
+# rownames(poly_filtered) <- colnames(sfe)
+# 
+# # add to the sfe
+# # MARGIN: 1 = righe (geni)
+# #         2 = colonne (nuclei)
+# dimGeometry(sfe, "filtered_nuclei", MARGIN = 2) <- poly_filtered
+
+# # try the fun
+#sfe_prova <- add2sfe(sfe_prova, shape_name = "filtered_nuclei", MARGIN = 2)
+```
+
+Let's read the shapes for each sample
+
+```{r}
+poly_list <- read_shapes(poly_path, samples_key)
+names(poly_list) <- samples_key
+```
+
+```{r}
+sfe_prova <- toSpatialFeatureExperiment(spe_list$blocco1_c26STAT3) |> 
+  add2sfe(poly_list$blocco1_c26STAT3, MARGIN = 2, )
+```
+
+
+All samples togheter
+```{r}
+
+sfe_list <- map2(spe_list, poly_list, function(spe, poly){
+    sfe <- toSpatialFeatureExperiment(spe)
+    sfe <- add2sfe(sfe, poly, MARGIN = 2, name = "filtered_nuclei")
+    sfe
+  })
+
+```
+
+# Saving objects
+
+```{r}
+save(pb_tt_wb7, file = paste0(Rd_path, "pseudobulk_tissuetype_wb7.RData"))
+save(pb_ct_wb7, file = paste0(Rd_path, "pseudobulk_celltype_wb7.RData"))
+save(sce_list, file = paste0(Rd_path, "sce_list_nuclei.RData"))
+save(sce_merged, file = paste0(Rd_path, "sce_merged_nuclei.RData"))
+
+save(spe_list, file = paste0(Rd_path, "spe_list_nuclei.RData"))
+save(spe_list_wb7, file = paste0(Rd_path, "spe_list_nuclei_dec_wb7.RData"))
+save(spe_merged, file = paste0(Rd_path, "spe_merged_nuclei.RData"))
+save(spe_merged_wb7, file = paste0(Rd_path, "spe_merged_nuclei_wb7.RData"))
+# oggetti risalvati con annotazione singleR
+save(spe_merged_sr, file = paste0(Rd_path, "spe_merged_nuclei_sr.RData"))
+save(spe_merged_sr_wb7, file = paste0(Rd_path, "spe_merged_nuclei_sr_wb7.RData"))
+saveRDS(pb_ct, file = paste0(Rd_path, "pseudobulk_celltype_SingleR"))
+save(pb_ct_wb7, file = paste0(Rd_path, "pseudobulk_celltype_SingleR_wb7.RData"))
+# Spatial Features Experiment (spe with nuclei polygons)
+saveRDS(sfe_list, file = paste0(Rd_path, "sfe_list_annotated"))
+# pseudobulk wb7 filtrata per to_discard
+saveRDS(pb_spe, file = paste0(Rd_path, "pseudobulk_celltype_SingleR_wb7_wdiscard"))
+
+# oggetto aggiornato con tutto (3/11/25)
+saveRDS(spe_list_up, file = paste0(Rd_path, "spe_list_nuclei_ann"))
+saveRDS(spe_list_12, file = paste0(Rd_path, "spe_list_nuclei_ann_b1_b2")) 
+
+# spaceranger - blocco1
+saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_b1_spe"))
+# spaceranger - blocco1 e blocco2 no cell expansion
+saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_nocell_expans"))
+# spaceranger - blocco 1 e blocco2 cell expansion 2 microns
+saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_cell_expans_2um"))
+
+```
+
+
+```{r}
+#rm(spe_list_up)
+
+spe_list <- readRDS(paste0(Rd_path, "spe_list_nuclei_ann"))
+spe_list_12 <- spe_list[stringr::str_detect(names(spe_list), "^blocco[12]")]
+```
+

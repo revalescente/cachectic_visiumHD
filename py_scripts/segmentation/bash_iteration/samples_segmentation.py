@@ -29,6 +29,7 @@ path_sdata = sys.argv[1]
 print(f"Processing file: {path_sdata}")
 
 sdata = sd.read_zarr(path_sdata)
+#sdata = sf.segmentation_step(sdata)
 sdata = sf.postprocess_step(sdata, expand_radius_ratio = 0, min_transcripts = 4, min_intensity_ratio = 0.15, no_overlap = True)
 
 filtered_nuclei_key = "filtered_nuclei"

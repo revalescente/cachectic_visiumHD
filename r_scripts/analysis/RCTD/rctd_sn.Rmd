@@ -279,12 +279,10 @@ plot_grids <- imap(spe_list_wb7, function(spe, spe_name) {
     # 2. Programmatically create a new column named after the content of `type`.
     # For example, if type is "Endothelial", this creates spe_local$Endothelial
     spe_local$is_here <- spe_local$labels_rctd == type
+    keep <- !is.na(spe_local$labels_rctd)
+    if (!any(keep)) return(NULL)
     
-    # 3. Call plotCoords, using the `type` variable as the column name string.
-    p <- plotCoords(
-      spe_local,
-      x_coord = "y",
-      y_coord = "x",
+    p <- spe_local[, keep] |> plotCoords(x_coord = "y", y_coord = "x",
       annotate = "is_here", # This now correctly refers to the new column
       point_size = 0.05
     ) +

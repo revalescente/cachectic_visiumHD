@@ -15,7 +15,7 @@ from py_scripts.utils.utils_fun import read_from_json
 samples_dict = read_from_json('/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json')
 
 # extract the sample_key in a list
-samples = [
+samples_key = [
     details['sample_key'] 
     for blocco in samples_dict.values() 
     for details in blocco.values()

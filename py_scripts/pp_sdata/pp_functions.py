@@ -212,7 +212,7 @@ def divide_samples(samples_dict,
             )
             
             # renaming coordinate system
-            sdata.rename_coordinate_systems(blocco : f"{blocco}_{sample}")
+            sdata_bbox.rename_coordinate_systems({blocco : f"{blocco}_{sample}"})
 
             # Sanity check
             try:

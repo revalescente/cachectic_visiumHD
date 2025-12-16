@@ -19,22 +19,21 @@ library(anndataR)
 library(scuttle)
 library(SpatialExperiment)
 library(data.table)
-library(writexl)
 library(BiocParallel)
 library(SingleR)
 library(dplyr)
 library(tidyr)
-library(writexl)
+library(SpaceTrooper)
 source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
 ```
 
 Paths to be defined
 
 ```{r}
-pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/singler_annot/spaceranger/"
+pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/"
 Rd_path = "/mnt/europa/valerio/data/Rdata/"
 ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
-res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results"
+res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/"
 quarto_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/presentations/segment_comparison/images/"
 ```
 
@@ -44,7 +43,8 @@ load(paste0(Rd_path, "color_cell_dec.RData"))
 load(paste0(Rd_path, 'spe_list_nuclei_ann.RData'))
 load(paste0(Rd_path, 'spaceranger_b1_spe.RData'))
 
-spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), 'blocco1')]
+spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), 'blocco2')]
+rm(spe_list_up)
 ```
 
 # Spatial visualization of the annotated spots/nuclei
@@ -53,7 +53,7 @@ spe_list_b1 <- spe_list_up[startsWith(names(spe_list_up), 'blocco1')]
 ```{r}
 plots <- imap(spe_list_b1, function(spe, name) {
   spe$cell_type <- as.factor(spe$labels_singler)
-  plotCentroids(spe, colourBy = "cell_type", size = 0.5) +
+  plotCentroids(spe, colourBy = "cell_type", size = 1) +
   scale_color_manual(values = color_vector) +
   theme(
     legend.key.width  = unit(0.5, "lines"),
@@ -61,14 +61,15 @@ plots <- imap(spe_list_b1, function(spe, name) {
   ) +
   guides(color = guide_legend(override.aes = list(size = 5)))  +
   scale_y_reverse()
-
 })
-
 
 iwalk(plots, function(plot, name){
   ggsave(paste0(pl_path,"spat_annotation/", name, "_b1_miei.png"), 
          plot = plot, dpi = 400, units = "cm", width = 50, height = 30)
 })
+#singles
+# ggsave(filename = paste0(pl_path,"plot_emma_b2_c26.png"), 
+#          plot = plots$blocco2_c26, dpi = 400, units = "cm", width = 50, height = 30)
 ```
 
 ## Divided by cell type
@@ -76,6 +77,7 @@ iwalk(plots, function(plot, name){
 ### GRID
 ```{r}
 cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
+cell_types <- sort(unique(spe_list_b1$blocco2_c26$labels_singler))
 
 # only myonuclei
 (cell_types <- cell_types[startsWith(cell_types, 'Myonuclei')])
@@ -131,7 +133,7 @@ cell_types <- sort(unique(spe_list_up$blocco1_c26STAT3$labels_singler))
 # only myonuclei
 # (cell_types <- cell_types[startsWith(cell_types, 'Myonuclei')])
 
-plot_lists <- imap(sr_spe_list, function(spe, name) {
+plot_lists <- imap(spe_list_b1, function(spe, name) {
   
   # for each sample create a plot of every cell type
   
@@ -147,8 +149,8 @@ plot_lists <- imap(sr_spe_list, function(spe, name) {
     spe_local$is_here <- as.factor(spe_local$labels_singler == type)
     
     # 3. Call plotCoords, using the `type` variable as the column name string.
-    p <- SpaceTrooper::plotCentroids(spe = spe_local, colourBy = "is_here") + 
-      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey80")) +
+    p <- SpaceTrooper::plotCentroids(spe = spe_local, colourBy = "is_here", size = 1.5) + 
+      scale_color_manual(values = c("TRUE" = "#CC3311", "FALSE" = "grey")) +
       labs(title = type) + # The subplot title is the cell type name 
       scale_y_reverse()
 
@@ -167,6 +169,18 @@ iwalk(plot_lists, function(sample, name){
            create.dir = TRUE)
   })
 })
+
+# remove axis mess
+plot_save <- plot_lists$blocco2_c26$Myonuclei_Trim63 + 
+  theme(
+    axis.title = element_blank(), # Removes both x and y axis titles
+    axis.text = element_blank(),  # Removes both x and y axis text labels
+    axis.ticks = element_blank()  # Removes both x and y axis tick marks
+  )
+
+#singles
+ggsave(filename = paste0(pl_path,"plot_emma_b2_c26_myotrim63.png"), 
+         plot = plot_save , dpi = 400, units = "cm", width = 50, height = 30)
 ```
 
 

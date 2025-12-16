@@ -432,7 +432,7 @@ def segmentation_step(sdata):
       raise ValueError(f"Could not parse blocco_key and samples_key from: {sdata_path}")
 
   # set-up sopa metadata
-  # sopa_attrs_check(sdata)
+  sopa_attrs_check(sdata)
   
   # 2. Segmentation
   # 2a. Divide the images in patches (overlapping if wanted)
@@ -448,7 +448,7 @@ def segmentation_step(sdata):
 # Post processing function 
 
 def postprocess_step(sdata, 
-                    expand_radius_ratio = 1, 
+                    expand_radius_ratio = 0, 
                     min_transcripts = 4,
                     min_intensity_ratio = 0.15,
                     no_overlap = True, 
