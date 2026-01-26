@@ -20,7 +20,7 @@ library(sf)
 library(sfarrow)
 # to read spatialdata objects
 library(ggnewscale)
-#library(SpatialData)
+library(SpatialData)
 library(SingleCellExperiment)
 library(anndataR)
 source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
@@ -30,11 +30,12 @@ Paths
 ```{r}
 #pl_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/cell_dec/"
 Rd_path = "/mnt/europa/valerio/data/Rdata/"
-zarr_path = "/mnt/europa/shared/sandri_visiumHD_data/bins/"
+zarr_path = "/mnt/europa/valerio/data/zarr_store/samples/"
 #ref_path = "/mnt/europa/valerio/data/multiome_sce/multiome_sce.rds"
 #res_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/results/DEC_ANN/"
 poly_path = "/mnt/europa/valerio/data/zarr_store/samples/"
 sr_path = "/mnt/europa/valerio/data/zarr_store/adatas/spaceranger_tables/"
+adata_path = "/mnt/europa/valerio/data/zarr_store/adatas/samples_adata/"
 ```
 
 # Concatenated samples
@@ -65,8 +66,8 @@ samples_key
 read_samples_list <- function(samples)
 {
   spe_list <- lapply(samples, function(sample) {
-    sdata <- readSpatialData(paste0("/mnt/europa/valerio/data/zarr_store/samples/", sample, ".zarr"), anndataR=TRUE)
-    tables(sdata)$nuclei_counts
+    sdata <- readSpatialData(paste0(zarr_path, "/", sample, ".zarr"), anndataR=TRUE)
+    #tables(sdata)$final_table
   })
   names(spe_list) = samples
   return(spe_list)
@@ -82,9 +83,9 @@ Per i dati in shared
 ```{r}
 read_shared_samples_list <- function(samples)
 {
-  spe_list <- lapply(samples, function(sample) {
+  spe_list <- map(samples, function(sample) {
     sdata <- readSpatialData(paste0(zarr_path, sample), anndataR=TRUE)
-    tables(sdata)$nuclei_counts
+    #tables(sdata)$final_table
   })
   names(spe_list) = samples
   return(spe_list)
@@ -99,14 +100,14 @@ sr_list = read_shared_samples_list(samples_key)
 
 ## Preparation of the different objects
 
-## Single Cell Experiment
+## Single Cell Experiment to spatial experiment
 
 ```{r}
 read_samples_adatas <- function(samples, data_path = "/mnt/europa/valerio/data/zarr_store/adatas/samples_adata/")
 {
-  sce_list <- lapply(samples, function(sample) {
+  spe_list <- map(samples, function(sample) {
     h5ad_path <- paste0(data_path, sample, ".h5ad")
-    sce <- read_h5ad(h5ad_path, to = "SingleCellExperiment")
+    sce <- read_h5ad(h5ad_path, as = "SingleCellExperiment")
     blocco <- strsplit(sample, "_")[[1]][1]
     sampletype <- strsplit(sample, "_")[[1]][2]
     sce$blocco <- blocco
@@ -114,15 +115,17 @@ read_samples_adatas <- function(samples, data_path = "/mnt/europa/valerio/data/z
     sce$ncounts <- colSums(assay(sce))
     sce$ngenes <- Matrix::colSums(assay(sce) > 0)
     sce$sample_id <- sample
-    sce
+    # add spatialcoordinate to the coordinate 
+    spe <- toSpatialExperiment(sce, spatialCoordsNames = c("x_coord", "y_coord"))
+    spe
   })
-  names(sce_list) = samples
-  return(sce_list)
+  names(spe_list) = samples
+  return(spe_list)
 }
 ```
 
 ```{r}
-sce_list = read_samples_adatas(samples_key)
+spe_list = read_samples_adatas(samples_key)
 #sce_list
 ```
 
@@ -456,10 +459,10 @@ sr_spe_list
 ## Spaceranger reading from adata
 
 ```{r}
-read_adatas_list <- function(samples)
+read_adatas_list <- function(samples, data_path = NULL)
 {
   adata_list <- map(samples, function(sample) {
-    adata <- read_h5ad(paste0(sr_path, sample, ".h5ad"),   to = "SingleCellExperiment")
+    adata <- read_h5ad(paste0(data_path, sample, ".h5ad"),   as = "SingleCellExperiment")
     adata
   })
   names(adata_list) = samples
@@ -468,7 +471,7 @@ read_adatas_list <- function(samples)
 ```
 
 ```{r}
-sr_list = read_adatas_list(samples_2)
+sr_list = read_adatas_list(samples_key)
 sr_list
 ```
 Correct the sr_list to become spatialExperiments
@@ -483,6 +486,28 @@ sr_spe_list <- imap(sr_list, function(sce, name){
 })
 sr_spe_list
 ```
+
+```{r}
+read_adatas_list <- function(samples, data_path = NULL)
+{
+  adata_list <- map(samples, function(sample) {
+    sce <- read_h5ad(paste0(data_path, sample, ".h5ad"),   as = "SingleCellExperiment")
+    blocco <- strsplit(sample, "_")[[1]][1]
+    sampletype <- strsplit(sample, "_")[[1]][2]
+    sce$blocco <- blocco
+    sce$sampletype <- sampletype
+    sce$sample_id <- sample
+    sce
+  })
+  names(adata_list) = samples
+  return(adata_list)
+}
+```
+
+```{r}
+spe_list <- read_adatas_list(samples_key, data_path = adata_path)
+```
+
 
 # Add labels of RCTD doublet into the spe_list_up where all info are stored togheter
 
@@ -579,6 +604,8 @@ saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_nocell_expans"))
 saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_cell_expans_2um"))
 
 ```
+
+
 
 
 ```{r}

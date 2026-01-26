@@ -1,6 +1,6 @@
 import spatialdata as sd
 from spatialdata.models import Image2DModel, Labels2DModel, ShapesModel
-from spatialdata.transformations import Identity, get_transformation, remove_transformation
+from spatialdata.transformations import Identity, get_transformation, remove_transformation, Translation, set_transformation
 import sopa
 import spatialdata_plot
 import matplotlib.pyplot as plt
@@ -14,16 +14,18 @@ from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 # and use big tiff to prevent the 4gb limit
 #
 # ./bftools/bfconvert -series 0 -bigtiff \
-#   Fluo_images/overlayed_ome_tif/blocco9.ome.tif \
-#   Fluo_images/warped_tif/blocco9.tif
+#   Fluo_images/overlayed_ome_tif/blocco2_c26murf1.ome.tif \
+#   Fluo_images/warped_tif/blocco2_c26murf1.tif
 #
 
 blocco = 'blocco2'
 
-img = io.imread(f"/mnt/europa/valerio/Fluo_images/warped_tif/{blocco}_rotated.tif")
+img = io.imread(f"/mnt/europa/valerio/Fluo_images/warped_tif/blocco2_c26SMAD23.tif")
 # print(img.shape, img.dtype)
 
 # 2nd channel correct, the other two no, fuck.
+# if the img doesn't have 3 dimensions
+img = img[..., np.newaxis]       # shape will be (5500, 21414, 1)
 
 img_rescaled = np.empty_like(img)
 for c in range(img.shape[-1]):
@@ -139,3 +141,60 @@ for sdata in sdata_list:
 # # sdata.delete_element_from_disk('nuclei_counts') 
 # # sdata.write_element('nuclei_counts')
 # # 
+
+# -----------------------------------------------------------------------------#
+####                        Blocco 2 pipeline                               ####
+
+img_parsed = Image2DModel.parse(data=img_rescaled, 
+            scale_factors=(2, 2, 2), 
+            transformations={blocco: Identity()},
+            dims=("y", "x", "c")
+)  
+sdata_path = '/mnt/europa/valerio/data/zarr_store/samples/'
+sdata = sd.read_zarr(f"{sdata_path}/blocco2_c26SMAD23.zarr")
+
+shape_key = 'nuclei_boundaries'
+table_key = 'final_table'
+
+sdata['fluo_image'] = img_parsed
+
+
+plt.figure(figsize=(20, 20))
+ax = plt.gca()
+sdata.pl.render_images('fluo_image', scale = 'scale2'
+).pl.render_images('full_image', scale = 'scale2').pl.show(ax = ax, coordinate_systems=blocco, save = 'output_python/b2_c26SMAD23_tryGFP.png')
+
+# Access the scale0 group
+s = sdata['fluo_image']['scale0']
+
+# For y
+ymin = float(s['y'].values.min())
+ymax = float(s['y'].values.max())
+print(f"y range: {ymin} to {ymax}")
+
+# For x
+xmin = float(s['x'].values.min())
+xmax = float(s['x'].values.max())
+print(f"x range: {xmin} to {xmax}")
+
+# translation until fluo_image is aligned with full_image i guess
+# b2 c26murf1 was calculated as max_y observed in fluo image - max value of the frame
+# same as b2 c26smad23: 8568.5 (max of fluo_image y axis) - 20069
+# translation = Translation([0, 6500.5], axes=("x", "y")) # c26murf1 blocco2
+translation = Translation([0, 11500.5], axes=("x", "y")) # c26SMAD23 blocco2
+set_transformation(sdata.images["fluo_image"], translation, to_coordinate_system="blocco2")
+
+
+channel_aggregation = sopa.aggregation.aggregate_channels(
+  sdata, image_key='fluo_image', 
+  shapes_key=shape_key, 
+  expand_radius_ratio=0, 
+  mode='max', no_overlap=False
+) 
+max_values_vector = channel_aggregation.max(axis=1)
+sdata[table_key].obs['GFP_value'] = max_values_vector
+
+sdata.write_element('fluo_image')
+sdata.delete_element_from_disk(table_key) 
+sdata.write_element(table_key)
+

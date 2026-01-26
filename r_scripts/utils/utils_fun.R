@@ -2,6 +2,7 @@ library(purrr)
 library(ggplot2)
 library(SpatialExperiment)
 library(scuttle)
+library(SpaceTrooper)
 
 # negate a statement ----
 `%nin%` <- negate(`%in%`)
@@ -51,44 +52,7 @@ dot_plot_marker <- function(df, gene_to_plot) {
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
-  # --- Modifications End ---
-  
   return(p)
-}
-
-
-
-# custom spatialQC metrics ----
-
-vHD_spatialPerCellQC <- function(spe, micronConvFact=0.316, rmZeros=TRUE, ...) {
-  stopifnot(is(object=spe, "SpatialExperiment"))
-  
-  is.mito <- BiocGenerics::grep("^mt-", BiocGenerics::rownames(spe), ignore.case = TRUE)
-  spe <- scuttle::addPerCellQC(spe, subsets = list(Mito = is.mito), ...)
-
-  if(!all(SpatialExperiment::spatialCoordsNames(spe) %in% names(colData(spe)))) {
-    colData(spe) <- cbind.DataFrame(colData(spe), spatialCoords(spe))
-  }
-
-  spnc <- spatialCoords(spe) * micronConvFact
-  colnames(spnc) <-  paste0(SpatialExperiment::spatialCoordsNames(spe), "_um")
-  colData(spe) <- cbind.DataFrame(colData(spe), spnc)
-  spe$Area_um <- spe$area * (micronConvFact^2)
-  spe$AspectRatio <- spe$major_axis_length/spe$minor_axis_length
-  if ("AspectRatio" %in% colnames(colData(spe))) {
-    spe$log2AspectRatio <- log2(spe$AspectRatio) # not cosmx
-  } else { warning("Missing aspect ratio in colData") }
-  
-  spe$CountArea <- spe$sum/spe$Area_um
-  spe$log2CountArea <- log2(spe$CountArea)
-  if (rmZeros) {
-    if (sum(spe$sum==0) > 0) {
-      message("Removing ", dim(spe[,spe$sum==0])[2],
-              " cells with 0 counts!")
-      spe <- spe[,!spe$sum==0]
-    }
-  }
-  return(spe)
 }
 
 # mapping labels from sublist to complete list ----
@@ -110,9 +74,7 @@ mappingLabels <- function(spe_list, ann_list) {
       cat("Skipping object:", name, "(no corresponding annotation found)\n")
     }
   }
-  
-  # --- THE CRUCIAL ADDITION ---
-  # Return the fully modified list
+
   return(spe_list)
 }
 
@@ -150,4 +112,47 @@ add2sfe <- function(spe_obj, polygons, MARGIN = NULL, name = "filtered_nuclei"){
   #         2 = colonne (nuclei)
   dimGeometry(spe_obj, name,  MARGIN = MARGIN) <- poly_filtered
   return(spe_obj)
+}
+
+
+# Function to clean the repeated coldata 
+clean_coldata <- function(spe) {
+  # Ensure the object has colData
+  stopifnot(is(object = spe, "SpatialExperiment"))
+  
+  # Extract and process colData
+  col_data <- colData(spe)
+  col_names <- colnames(col_data)
+  
+  # Find duplicates (columns with the same name)
+  unique_names <- unique(col_names)
+  to_keep <- rep(TRUE, ncol(col_data)) # Keeps track of which columns to retain
+  
+  # Iterate over unique column names
+  for (name in unique_names) {
+    indices <- which(col_names == name)
+    
+    if (length(indices) > 1) {
+      # Case 1: Columns are identical
+      identical_cols <- sapply(indices, function(i) {
+        all(col_data[[i]] == col_data[[indices[1]]])
+      })
+      
+      if (all(identical_cols)) {
+        # Keep only the first instance if all are identical
+        to_keep[indices[-1]] <- FALSE
+      } else {
+        # Case 2: Columns with the same name but different content
+        # Keep the one with the highest index (drop lower indices)
+        to_keep[indices[-length(indices)]] <- FALSE
+      }
+    }
+  }
+  
+  # Subset colData to only keep the valid columns
+  clean_col_data <- col_data[, to_keep, drop = FALSE]
+  
+  # Update the original SpatialExperiment object with cleaned colData
+  colData(spe) <- clean_col_data
+  return(spe)
 }

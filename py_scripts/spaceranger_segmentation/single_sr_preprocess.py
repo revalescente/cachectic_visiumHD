@@ -1,14 +1,20 @@
 import spatialdata as spd
 import gc
+import geopandas as gpd
 import py_scripts.utils.spaceranger_utility as sr
 from py_scripts.utils.utils_fun import read_from_json
+from spatialdata.models import ShapesModel, Image2DModel
+from spatialdata.transformations import Identity, set_transformation, get_transformation, Scale
+from skimage import io
+import sopa
+import numpy as np
 
 # spaceranger pipeline update
-blocco = "blocco2"
+blocco = "blocco1"
 # read sdata full blocco
 sdata = spd.read_zarr(f"/mnt/europa/valerio/data/zarr_store/spaceranger_v4/no_cell_expans/blocchi/{blocco}")
 
-save_path = "/mnt/europa/valerio/data/zarr_store/spaceranger_v4/try2/"
+save_path = "/mnt/europa/valerio/data/zarr_store/spaceranger_v4/"
 poly_path = "/mnt/europa/valerio/data/json/geojson_dir/in_tissue/fullres/"
 fullres_path = "/mnt/europa/valerio/HE_images/color_corrected/"
 fluo_path = "/mnt/europa/valerio/Fluo_images/warped_tif/"
@@ -95,11 +101,11 @@ sdata[table_key].obs['GFP_value'] = max_values_vector
 
 # old blocco 2 problem, maybe solved
 # Get all unique tissue types to iterate over
-sdata.tables[table_key].obs['tissue_type'] = sdata.tables[table_key].obs['tissue_type'].replace('c26foxO', 'c26murf1')
+#sdata.tables[table_key].obs['tissue_type'] = sdata.tables[table_key].obs['tissue_type'].replace('c26foxO', 'c26murf1')
 #
 # # 2) If it's a categorical column, you need to also update the categories
-if sdata.tables[table_key].obs['tissue_type'].dtype.name == 'category':
-    sdata.tables[table_key].obs['tissue_type'] = sdata.tables[table_key].obs['tissue_type'].cat.rename_categories({'c26foxO': 'c26murf1'})
+# if sdata.tables[table_key].obs['tissue_type'].dtype.name == 'category':
+#     sdata.tables[table_key].obs['tissue_type'] = sdata.tables[table_key].obs['tissue_type'].cat.rename_categories({'c26foxO': 'c26murf1'})
 #
 # # 3) Verify
 print(sdata.tables[table_key].obs['tissue_type'].unique())
@@ -112,8 +118,8 @@ sdata. shapes["blocco2_all_poly"]["name"] = (
 # Verify
 print(sdata.shapes["blocco2_all_poly"]["name"]. unique())
 
-sdata.delete_element_from_disk(table_key)
-sdata.write_element(table_key)
+# sdata.delete_element_from_disk(table_key)
+# sdata.write_element(table_key)
 
 all_tissue_types = sdata[table_key].obs['tissue_type'].unique().tolist()
 print(f"Found tissue types in '{blocco_key}': {all_tissue_types}")

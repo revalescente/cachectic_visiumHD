@@ -14,7 +14,7 @@ from py_scripts.utils.utils_fun import read_from_json
 
 samples_dict = read_from_json("/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json")
 
-blocco = 'blocco1'
+blocco = 'blocco2'
 block_samples = samples_dict.get(blocco)
 sample_keys = [data['sample_key'] for data in block_samples.values()]
 # sopa

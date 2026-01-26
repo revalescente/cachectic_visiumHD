@@ -52,8 +52,6 @@ meta_list <- split(meta_df, meta_df$sample_key) |>
 
 # Check the result
 head(meta_list[[1]])
-
-
 ```
 
 ```{r}

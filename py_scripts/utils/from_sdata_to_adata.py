@@ -31,4 +31,16 @@ for blocco, samples in samples_dict.items():
 
 
 
+spatialdata_path = f"{spatialdata_dir}/blocco1_c26STAT3"
+sdata = sd.read_zarr(spatialdata_path)
+prop_df = sf.features_extraction(sdata, nuclei_element_name = "blocco1_c26STAT3_nuclei_boundaries")
+# Identify which columns are missing in the .obs DataFrame
+missing_columns = [col for col in prop_df.columns if col not in sdata[table_key].obs.columns]
+# Add only the missing columns to .obs
+for col in missing_columns:
+    if col in prop_df:  # Ensure the column also exists in df
+        sdata[table_key].obs[col] = prop_df[col]
 
+sdata.delete_element_from_disk('segmentation_counts')
+sdata.write_element('segmentation_counts')
+su.save_table_as_h5ad(spatialdata_path, table_key, output_dir)

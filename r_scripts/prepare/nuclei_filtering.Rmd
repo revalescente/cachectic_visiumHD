@@ -3,7 +3,8 @@ title: "nuclei_filtering"
 output: html_document
 params:
   labels_key: "labels_singler"
-  spe_key: "spaceranger_spe_nocell_expans"
+  #spe_key: "spaceranger_spe_nocell_expans"
+  spe_key: "spe_list_nuclei_ann"
 ---
 
 ```{r setup, include=FALSE}
