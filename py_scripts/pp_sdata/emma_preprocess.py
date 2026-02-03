@@ -13,21 +13,22 @@ from spatialdata.transformations import Identity, set_transformation, get_transf
 from py_scripts.utils.utils_fun import read_from_json
 import py_scripts.pp_sdata.pp_functions as pp
 
-geojson_dir = "/mnt/europa/valerio/data/json/geojson_dir/"
+geojson_dir = "/mnt/europa/valerio/data/json/geojson_dir/intissue_GFP_polys"
 blocco_key = 'blocco2'
+sample_key = 'c26'
 hires_key = f'{blocco_key}_hires_image'
-geojson_path = f"{geojson_dir}in_tissue/tissue_hires_image_{blocco_key}.geojson"
+geojson_path = f"{geojson_dir}/{blocco_key}_{sample_key}.geojson"
 
 sdata = visium_hd(
         path= f"/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_3.1/{blocco_key}/outs",
         dataset_id=f"{blocco_key}",
         filtered_counts_file=False,
-        bin_size='008',
+        bin_size=['008','016'],
         bins_as_squares=True,
         annotate_table_by_labels=False,
         load_all_images=False,
         var_names_make_unique=True,
-        image_models_kwargs = {dims : ['c', 'y', 'x']}
+        image_models_kwargs = {'dims' : ['c', 'y', 'x']}
     )
 
 # # Find hires image key using regex

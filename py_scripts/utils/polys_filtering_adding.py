@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import spatialdata as sd
 from spatialdata.models import ShapesModel
-from spatialdata.transformations import Identity
+from spatialdata.transformations import Identity, get_transformation
 from skimage.measure import regionprops_table
 import sopa
 
@@ -18,7 +18,7 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 try:
-    from py_scripts.utils.utils_fun import read_from_json
+    from utils.utils_fun import read_from_json
 except ImportError:
     print("Warning: Could not import 'read_from_json'. Make sure environment is correct.")
     sys.exit(1)
@@ -136,6 +136,7 @@ def main():
     parser.add_argument("--table_name", default='nuclei_counts_nop', help="Input table name")
     parser.add_argument("--table_name_new", default='final_table', help="Output table name")
     parser.add_argument("--nuclei_key", default='nuclei_boundaries', help="Nuclei key")
+    parser.add_argument("--trasform_key", default='full_image', help="Key of the element in the same coordinate system of the polys")
     
     args = parser.parse_args()
 
@@ -147,7 +148,7 @@ def main():
             print(f"\nProcessing sample: {sample_key}")
 
             # 1. Load Sdata
-            zarr_path = os.path.join(args.sdata_dir, f"{sample_key}.zarr")
+            zarr_path = os.path.join(args.sdata_dir, f"{sample_key}")
             if not os.path.exists(zarr_path):
                 print(f"  [SKIP] Zarr not found: {zarr_path}")
                 continue
@@ -161,12 +162,21 @@ def main():
             
             table = sdata[args.table_name].copy()
             
+            # Get instance key for linking table to shapes
+            if 'spatialdata_attrs' not in table.uns or 'instance_key' not in table.uns['spatialdata_attrs']:
+                print(f"  [ERROR] Table '{args.table_name}' is missing spatialdata attributes 'instance_key'.")
+                continue
+            instance_key = table.uns['spatialdata_attrs']['instance_key']
+
             # 3. Get Coordinate System
             if not list(sdata.coordinate_systems):
                 print("  [SKIP] No coord system.")
                 continue
-            coord_sys = list(sdata.coordinate_systems)[0]
-
+            coord_sys = block_id
+            
+            # 3a. Get the transformation of the reference full image
+            transform = get_transformation(sdata[args.trasform_key], to_coordinate_system = coord_sys)
+            
             # 4. Initialize Columns
             for col in ['in_treatment', 'to_discard', 'in_tissue']:
                 table.obs[col] = False
@@ -180,7 +190,7 @@ def main():
                     sample_poly = gpd.read_file(geojson_file)
                     if not sample_poly.empty:
                         sample_poly = sample_poly.set_crs(None, allow_override=True)
-                        sample_poly_parsed = ShapesModel.parse(sample_poly, transformations={coord_sys: Identity()})
+                        sample_poly_parsed = ShapesModel.parse(sample_poly, transformations={coord_sys : transform})
                         sdata["polys"] = sample_poly_parsed
                         polys_loaded = True
                     else:
@@ -208,10 +218,15 @@ def main():
                             
                             if col_name:
                                 nuclei_list = nuclei_per_poly[source_key]
-                                valid_indices = table.obs.index.intersection(nuclei_list)
-                                if len(valid_indices) > 0:
-                                    table.obs.loc[valid_indices, col_name] = True
-                                    print(f"    Mapped '{source_key}' -> '{col_name}' ({len(valid_indices)})")
+#                                valid_indices = table.obs.index.intersection(nuclei_list)
+#                                if len(valid_indices) > 0:
+#                                    table.obs.loc[valid_indices, col_name] = True
+#                                    print(f"    Mapped '{source_key}' -> '{col_name}' ({len(valid_indices)})")
+                                # Use instance_key to find matching rows in the table
+                                mask = table.obs[instance_key].isin(nuclei_list)
+                                if mask.any():
+                                    table.obs.loc[mask, col_name] = True
+                                    print(f"    Mapped '{source_key}' -> '{col_name}' ({mask.sum()})")
                 except Exception as e:
                     print(f"  [ERROR] Sjoin failed: {e}")
 

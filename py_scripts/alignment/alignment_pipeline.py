@@ -13,9 +13,9 @@ from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 # # we convert only the first series (aka the full res serie and not the full pyramid)
 # and use big tiff to prevent the 4gb limit
 #
-# ./bftools/bfconvert -series 0 -bigtiff \
-#   Fluo_images/overlayed_ome_tif/blocco2_c26murf1.ome.tif \
-#   Fluo_images/warped_tif/blocco2_c26murf1.tif
+./bftools/bfconvert -series 0 -bigtiff \
+  Fluo_images/overlayed_ome_tif/blocco2_c26murf1.ome.tif \
+  Fluo_images/warped_tif/blocco2_c26murf1.tif
 #
 
 blocco = 'blocco2'
