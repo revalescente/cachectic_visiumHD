@@ -42,21 +42,69 @@ Other images, such as a high-resolution microscope image or CytAssist image, can
 # }
 # no cell
 sample = {
-  "blocco1":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco1/outs/segmented_outputs/raw_feature_cell_matrix.h5",
-             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco1/outs/segmented_outputs/spatial/tissue_hires_image.png",
-             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco1/outs/segmented_outputs/spatial/scalefactors_json.json",
-             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco1/outs/segmented_outputs/nucleus_segmentations.geojson",
+  "blocco1":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco1/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco1/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco1/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco1/outs/segmented_outputs/nucleus_segmentations.geojson",
              "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco1.geojson",
              "blocco1",
-             "/mnt/europa/valerio/data/zarr_store/spaceranger_v4/cell_expans_2um/blocchi/"
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
              ],
-  "blocco2":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco2/outs/segmented_outputs/raw_feature_cell_matrix.h5",
-             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco2/outs/segmented_outputs/spatial/tissue_hires_image.png",
-             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco2/outs/segmented_outputs/spatial/scalefactors_json.json",
-             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_2micron/blocco2/outs/segmented_outputs/nucleus_segmentations.geojson",
+  "blocco2":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco2/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco2/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco2/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell/blocco2/outs/segmented_outputs/nucleus_segmentations.geojson",
              "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco2.geojson",
              "blocco2",
-             "/mnt/europa/valerio/data/zarr_store/spaceranger_v4/cell_expans_2um/blocchi/"
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
+            ],
+  "blocco3":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco3/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco3/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco3/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco3/outs/segmented_outputs/nucleus_segmentations.geojson",
+             "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco3.geojson",
+             "blocco3",
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
+             ],
+  "blocco4":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco4/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco4/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco4/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco4/outs/segmented_outputs/nucleus_segmentations.geojson",
+             "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco4.geojson",
+             "blocco4",
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
+            ],
+  "blocco5":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco5/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco5/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco5/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco5/outs/segmented_outputs/nucleus_segmentations.geojson",
+             "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco5.geojson",
+             "blocco5",
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
+             ],
+  "blocco6":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco6/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco6/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco6/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco6/outs/segmented_outputs/nucleus_segmentations.geojson",
+             "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco6.geojson",
+             "blocco6",
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
+            ],
+  "blocco7":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco7/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco7/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco7/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco7/outs/segmented_outputs/nucleus_segmentations.geojson",
+             "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco7.geojson",
+             "blocco7",
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
+             ],
+  "blocco9":["/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco9/outs/segmented_outputs/raw_feature_cell_matrix.h5",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco9/outs/segmented_outputs/spatial/tissue_hires_image.png",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco9/outs/segmented_outputs/spatial/scalefactors_json.json",
+             "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans/blocco9/outs/segmented_outputs/nucleus_segmentations.geojson",
+             "/mnt/europa/valerio/data/json/geojson_dir/tissue_hires_image_blocco9.geojson",
+             "blocco9",
+             "/mnt/europa/valerio/data/zarr_store/clean_data/blocchi/"
             ]
 }
 
@@ -76,9 +124,9 @@ gc.collect()
 """
 Let's divide the samples in the blocco, I need a samples dictionary to know where to cut the bbox
 """
-save_path = "/mnt/europa/valerio/data/zarr_store/spaceranger_v4/try2/"
+save_path = "/mnt/europa/valerio/data/zarr_store/clean_data/samples-"
 
-blocchi = ["blocco1","blocco2"]
+blocchi = ["blocco1","blocco2", "blocco3", "blocco4", "blocco5", "blocco6", "blocco7", "blocco9"]
 
 for blocco in blocchi:
   sdata = spd.read_zarr(f"/mnt/europa/valerio/data/zarr_store/spaceranger_v4/no_cell_expans/blocchi/{blocco}")

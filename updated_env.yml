@@ -1,0 +1,17 @@
+name: spatialdata_prep_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - setuptools
+  - matplotlib
+  - geopandas
+  # Ensure compatible geospatial binaries are installed by conda
+  - shapely>=2.0
+  - pyarrow
+  - pip:
+    # Keep sopa in pip (likely not on conda-forge or updates faster)
+    - spatialdata[extra]
+    - sopa

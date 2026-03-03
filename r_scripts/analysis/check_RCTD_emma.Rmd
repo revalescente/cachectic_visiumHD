@@ -1,0 +1,719 @@
+---
+title: "Esplorazione Bin"
+author: "Valerio Reffo"
+date: "2026-03-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message=FALSE, warning=FALSE, include=FALSE}
+library(purrr)
+library(ggplot2)
+library(ggspavis)
+library(jsonlite)
+library(anndataR)
+#library(scuttle)
+library(SpatialExperiment)
+library(data.table)
+# to read spatialdata objects
+library(ggnewscale)
+#library(SpatialData)
+library(SingleCellExperiment)
+# library(SingleR)
+library(BiocParallel)
+#source("/mnt/europa/valerio/repositories/cachetic_visiumHD/r_scripts/utils/utils_fun.R")
+
+library(dplyr)
+library(tidyr)
+library(forcats) # For ordering plots
+
+```
+
+Leggiamo i dati di emma sui 16 bin (e forse anche 8 bin se li ho) e vediamo un po' di statistiche su questi markers.
+
+```{r}
+spe_list <- readRDS("~/data/Rdata/emma_16um_bin_annotated_spelist.RDS")
+spe <-spe_list$sham_b1
+
+marker_genes <- readRDS("~/data/Rdata/marker_genes_list_singleR_annot")
+marker_genes
+
+color_vector <- readRDS("~/data/Rdata/color_cell_dec")
+
+```
+
+```{r}
+spe
+```
+
+# Analysis of RCTD results
+
+There are a lot of Endothelial, but why? what is the distribution of the probability for each bin to be a Endothetial? 
+
+```{r}
+cd_df <- colData(spe) |> as_tibble()
+
+```
+
+```{r}
+cd_df |> 
+  filter(cell_type == "Endothelial") |> 
+  summarise(mean = mean(Endothelial),
+            sd = sd(Endothelial),
+            min = min(Endothelial),
+            max = max(Endothelial))
+
+cd_df |> 
+  filter(cell_type == "Endothelial", Endothelial == 0) |> 
+  summarise(n = n())
+cd_df |> 
+  filter(cell_type == "Endothelial", Endothelial == 1) |> 
+  summarise(n = n())
+cd_df |> 
+  filter(
+    cell_type == "Endothelial", 
+    between(Endothelial, 0.5, 0.99)
+  ) |> 
+  summarise(n = n())
+cd_df |> 
+  filter(
+    cell_type == "Endothelial", 
+    between(Endothelial, 0.0001, 0.5)
+  ) |> 
+  summarise(n = n())
+```
+
+```{r}
+# 1. Filter only the bins assigned as Endothelial
+p_hist <- as.data.frame(cd_df) |> 
+  filter(cell_type == "Endothelial") |>
+  ggplot(aes(x = Endothelial)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black", alpha = 0.8) +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Endothelial Scores",
+    subtitle = "Only including bins classified as 'Endothelial'",
+    x = "Endothelial Score (0-1)",
+    y = "Number of Bins"
+  )
+
+print(p_hist)
+```
+
+
+
+Second highest scores among Endothelial defined cell types
+```{r}
+# Define all your cell type score columns
+score_cols <- c("Endothelial", "FAPs", "Immune_Cells", "MuSC", 
+                "Myonuclei_IIb", "Myonuclei_IIx", "Myonuclei_IIx_IIa", 
+                "Myonuclei_IIx_IIb", "Myonuclei_MTJ", "Myonuclei_NMJ", 
+                "Myonuclei_Trim63", "Nervous_System", "Pericyte", 
+                "Smooth_Muscular", "Tenocyte")
+
+# Extract the second highest score for each Endothelial bin
+second_highest_df <- cd_df |> 
+  filter(cell_type == "Endothelial", Endothelial != 0) |>
+  select(barcode, all_of(score_cols)) |> 
+  pivot_longer(cols = -barcode, names_to = "candidate_type", values_to = "score") |>
+  # Group by each individual bin
+  group_by(barcode) |>
+  # Sort scores from highest to lowest inside each bin
+  arrange(desc(score)) |>
+  # Grab the 2nd row (which is the second highest score)
+  slice(2) |> 
+  ungroup()
+
+# Plot: WHICH cell types are most frequently the "second choice"?
+p_2nd_identity <- ggplot(second_highest_df, aes(x = fct_infreq(candidate_type))) +
+  geom_bar(fill = "darkorange", color = "black", alpha = 0.8) +
+  theme_minimal() +
+  coord_flip() + # Flip for readable names
+  labs(
+    title = "What is sharing space with Endothelial cells?",
+    subtitle = "Most common 'second-highest' cell types in Endothelial bins",
+    x = "Cell Type",
+    y = "Count of Bins"
+  )
+
+print(p_2nd_identity)
+
+```
+
+```{r}
+plot_confidence <- cd_df |> 
+  filter(cell_type == "Endothelial", Endothelial != 0) |>
+  left_join(second_highest_df |> select(barcode, second_type = candidate_type, second_score = score), by = "barcode") |>
+  mutate(Confidence_Delta = Endothelial - second_score) |> 
+  ggplot(aes(x = Confidence_Delta)) +
+  geom_histogram(bins = 30, fill = "purple", color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Assignment Confidence (Endothelial Score - 2nd Highest Score)",
+       x = "Delta (Higher = Purer Bin, Lower = Mixed Bin)")
+plot_confidence
+```
+
+```{r}
+weird_endo <- cd_df |> 
+  filter(cell_type == "Endothelial", Endothelial == 0)
+
+# 2. Check the MAXIMUM score for all other cell types in these bins
+cat("\n--- MAXIMUM SCORE IN OTHER CELL TYPES ---\n")
+weird_endo |> 
+  select(FAPs:Tenocyte) |> 
+  summarise(across(everything(), max)) |> 
+  print(width = Inf)
+
+# 3. Check HOW MANY of these 5700 bins have a score > 0 for the other cell types
+cat("\n--- NUMBER OF BINS WITH SCORE > 0 ---\n")
+weird_endo |> 
+  select(FAPs:Tenocyte) |> 
+  summarise(across(everything(), ~ sum(. > 0))) |> 
+  print(width = Inf)
+```
+
+```{r}
+# 2. Reshape and calculate the summary
+zero_score_summary <- cd_df |> 
+  # Keep only the essential columns (barcode, assigned cell_type, and the score columns)
+  select(barcode, assigned_type = cell_type, all_of(score_cols)) |> 
+  
+  # Pivot the score columns into two new columns: 'score_type' and 'score_value'
+  pivot_longer(
+    cols = all_of(score_cols), 
+    names_to = "score_type", 
+    values_to = "score_value"
+  ) |> 
+  
+  # KEEP ONLY the rows where the assigned type matches the score column name
+  filter(assigned_type == score_type) |> 
+  
+  # Group by the assigned cell type to calculate our stats
+  group_by(assigned_type) |> 
+  
+  # Calculate how many total bins, and how many have a score of exactly 0
+  summarise(
+    total_bins = n(),
+    bins_with_zero_score = sum(score_value == 0, na.rm = TRUE),
+    .groups = "drop"
+  ) |> 
+  
+  # Add the percentage for context
+  mutate(percentage_zero = (bins_with_zero_score / total_bins) * 100) |> 
+  
+  # Sort so the worst offenders are at the top
+  arrange(desc(bins_with_zero_score))
+
+# View the result
+print(zero_score_summary)
+```
+Looks like is a unique problem of the Endothelial and MuSC (which are manually annotated i guess)
+
+```{r}
+cd_df <- cbind(cd_df, spatialCoords(spe))
+valid_barcodes <- cd_df |> 
+  select(barcode, cell_type, all_of(score_cols)) |> 
+  pivot_longer(
+    cols = all_of(score_cols), 
+    names_to = "score_type", 
+    values_to = "score_value"
+  ) |> 
+  # Keep only rows where the assignment matches the score column, AND the score is > 0
+  filter(cell_type == score_type, score_value > 0) |> 
+  pull(barcode) # This pulls just the barcodes into a simple vector
+
+# 3. Filter your main dataframe using %in%
+cd_df_clean <- cd_df |> 
+  filter(barcode %in% valid_barcodes)
+
+# 4. Plot the cleaned spatial map!
+p_clean_map <- ggplot(cd_df_clean, aes(x = pxl_col_in_fullres, y = pxl_row_in_fullres, color = cell_type)) +
+  geom_point(size = 0.6) +
+  scale_y_reverse() + # Keep the tissue right-side up
+  scale_color_manual(values = color_vector) +
+  theme_void() +
+  coord_fixed() +
+  labs(
+    title = "Spatial Map of Confident Cell Types",
+    subtitle = paste0("Excluded ", nrow(cd_df) - nrow(cd_df_clean), " bins with an assigned score of 0"),
+    color = "Cell Type"
+  ) +
+  # This makes the dots in the legend bigger so they are easier to read
+  guides(color = guide_legend(override.aes = list(size = 4)))
+
+print(p_clean_map)
+```
+
+
+```{r}
+cell_proportions <- cd_df_clean |> 
+  count(cell_type) |> 
+  mutate(
+    proportion = n / sum(n),
+    percentage = proportion * 100
+  ) |> 
+  # Sort so the most abundant cell type is at the top of the plot
+  arrange(desc(percentage))
+
+# plot
+p_stacked <- cd_df_clean |> 
+  ggplot(aes(x = "Filtered Tissue", fill = cell_type)) +
+  
+  # Removed color = "white" so the bars touch seamlessly
+  geom_bar(position = "fill", width = 0.4) +
+  
+  # Applies your custom color palette
+  scale_fill_manual(values = color_vector) +
+  
+  theme_minimal() +
+  labs(
+    title = "Composition of Confident Cell Types",
+    subtitle = paste0("Total valid bins: ", nrow(cd_df_clean)),
+    x = NULL, 
+    y = "Proportion (0 to 1)",
+    fill = "Cell Type"
+  ) +
+  theme(
+    axis.text.x = element_text(size = 14, face = "bold"), 
+    panel.grid.major.x = element_blank(), 
+    panel.grid.minor.x = element_blank()
+  )
+
+print(p_stacked)
+```
+
+```{r}
+cd_df_analyzed <- cd_df |> 
+  rowwise() |> 
+  mutate(
+    # What was the score of the cell_type it was originally assigned?
+    original_score = c_across(all_of(score_cols))[match(cell_type, score_cols)],
+    
+    # What is the highest score across ALL cell types for this bin?
+    max_score = max(c_across(all_of(score_cols))),
+    
+    # WHICH cell type has that highest score?
+    best_type = score_cols[which.max(c_across(all_of(score_cols)))]
+  ) |> 
+  ungroup()
+
+# 3. Print the Diagnostic Summary!
+cat("\n--- WHAT IS INSIDE THE SCORE=0 BINS? ---\n")
+cd_df_analyzed |> 
+  filter(original_score == 0) |> 
+  mutate(
+    # Group them into "Completely Empty" vs "Mislabeled"
+    status = if_else(max_score == 0, 
+                     "All 15 scores are 0", 
+                     paste("Actually belongs to:", best_type))
+  ) |> 
+  count(assigned_as = cell_type, status, name = "number_of_bins") |> 
+  arrange(desc(number_of_bins)) |> 
+  print(n = 50) # Prints the top 50 rows so you can see where they went
+```
+
+Create a new cell type column
+
+```{r}
+# 2. Define the function
+fix_spe_celltypes <- function(spe, score_columns, cell_type_col = "cell_type") {
+  
+  # Extract colData as a dataframe
+  cd <- as.data.frame(colData(spe))
+  
+  # Convert just the score columns into a numeric matrix (for extreme speed)
+  score_mat <- as.matrix(cd[, score_columns])
+  
+  # A. Find the MAXIMUM score for each bin
+  max_score <- apply(score_mat, 1, max)
+  
+  # B. Find WHICH cell type has that maximum score using max.col()
+  best_type <- score_columns[max.col(score_mat, ties.method = "first")]
+  
+  # C. Find the score of the CURRENTLY assigned cell type
+  # We find the column index of the assigned cell type, then extract the exact score
+  orig_col_idx <- match(as.character(cd[[cell_type_col]]), score_columns)
+  orig_score <- score_mat[cbind(1:nrow(score_mat), orig_col_idx)]
+  
+  # ---------------------------------------------------------
+  # Apply your logic to create new_cell_type
+  # ---------------------------------------------------------
+  new_cell_type <- as.character(cd[[cell_type_col]])
+  
+  # Logic 1: If original score is 0, but another type is > 0 -> Reassign to best_type
+  reassign_mask <- which(orig_score == 0 & max_score > 0)
+  new_cell_type[reassign_mask] <- best_type[reassign_mask]
+  
+  # Logic 2: If EVERY score is 0 -> Assign NA
+  na_mask <- which(max_score == 0)
+  new_cell_type[na_mask] <- NA
+  
+  # Assign the new column back directly into the SPE object's colData
+  spe$new_cell_type <- new_cell_type
+  
+  return(spe)
+}
+```
+
+```{r}
+spe <- fix_spe_celltypes(spe, score_cols)
+```
+
+
+# Analisi per tutta la lista dei campioni
+
+```{r}
+zeroscore_fun <- function(spe){
+  cd_df <- colData(spe) |> as_tibble()
+  
+  # zero score summary info
+  zero_score_summary <- cd_df |> 
+    # Keep only the essential columns (barcode, assigned cell_type, and the score columns)
+    select(barcode, assigned_type = cell_type, all_of(score_cols)) |> 
+    
+    # Pivot the score columns into two new columns: 'score_type' and 'score_value'
+    pivot_longer(
+      cols = all_of(score_cols), 
+      names_to = "score_type", 
+      values_to = "score_value"
+    ) |> 
+    
+    # KEEP ONLY the rows where the assigned type matches the score column name
+    filter(assigned_type == score_type) |> 
+    
+    # Group by the assigned cell type to calculate our stats
+    group_by(assigned_type) |> 
+    
+    # Calculate how many total bins, and how many have a score of exactly 0
+    summarise(
+      total_bins = n(),
+      bins_with_zero_score = sum(score_value == 0, na.rm = TRUE),
+      .groups = "drop"
+    ) |> 
+    
+    # Add the percentage for context
+    mutate(percentage_zero = (bins_with_zero_score / total_bins) * 100) |> 
+    
+    # Sort so the worst offenders are at the top
+    arrange(desc(bins_with_zero_score))
+  
+  # new cell types column to add to colData
+
+    
+  
+  return(list(zeroScoreSummary = zero_score_summary, add2coldata = new_cell_types))
+}
+
+zeroscore_list <- map(spe_list, zeroscore_fun)
+walk(zeroscore_list, \(el) {print(el$percentage_zero[1])})
+```
+
+Add new cell type column to each spe sample
+```{r}
+spe_list <- map(spe_list, \(spe) {spe <- fix_spe_celltypes(spe, score_cols)})
+
+map(spe_list, \(x){table(x$new_cell_type)})
+```
+
+# plots of the differences
+
+```{r}
+prop_df_ordered <- imap_dfr(spe_list, function(spe, name) {
+  tab <- base::table(colData(spe)[["new_cell_type"]])
+  prop <- prop.table(tab)
+  tissue_type <- unique(spe$tissue_type)
+  data.table(
+    sample_id = name,
+    cell_type = names(prop),
+    proportion = as.numeric(prop),
+    tissue_type = as.character(tissue_type)
+  )
+}) |> 
+  # lower case otherwise S is before f and m
+  arrange(stringr::str_to_lower(tissue_type), sample_id) |>
+  mutate(sample_id = fct_inorder(sample_id))
+
+# vertical bars
+ggplot(prop_df_ordered, aes(x = sample_id, y = proportion, fill = cell_type)) +
+  geom_col() +                             # geom_col uses the y value directly (identity)
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(values = color_vector) +# use your named color_vector; otherwise use scale_fill_brewer()
+  labs(x = "Sample", y = "Proportion", fill = "Cell type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave("~/repositories/cachetic_visiumHD/figures/output_R/emma_RCTD_by_me/cell_type_proportions_vert.png", width = 10, height = 6, dpi = 300)
+```
+
+By conditions
+```{r}
+prop_df_condition <- imap_dfr(spe_list, function(spe, name) {
+  data.table(
+    tissue_type = as.character(spe$tissue_type),
+    cell_type = colData(spe)[["new_cell_type"]]
+  ) |> 
+    filter(!is.na(cell_type))
+}) |> 
+  arrange(stringr::str_to_lower(tissue_type)) |> 
+  dplyr::count(tissue_type, cell_type) |>
+  group_by(tissue_type) |>
+  mutate(proportion = n / sum(n)) |>
+  ungroup()
+
+
+ggplot(prop_df_condition, aes(x = tissue_type, y = proportion, fill = cell_type)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = color_vector) +
+  theme_minimal() +
+  labs(
+    title = "Proporzioni dei tipi cellulari per condizione",
+    x = "Condizione (tissue_type)",
+    y = "Proporzione",
+    fill = "Tipo Cellulare"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("~/repositories/cachetic_visiumHD/figures/output_R/emma_RCTD_by_me/cell_type_proportions_by_condition.png", width = 10, height = 6, dpi = 300)
+```
+
+## Cell type proportions stratified by condition
+
+```{r boxplot-chunk, eval = !params$partial_data}
+# This chunk will not run if partial_data == FALSE
+prop_per_sample <- imap_dfr(spe_list, function(spe, name) {
+  cd <- as.data.table(SummarizedExperiment::colData(spe))
+  cd |>
+    filter(!is.na(.data[["new_cell_type"]])) |>
+    dplyr::count(.data[["new_cell_type"]], name = "count") |>
+    mutate(proportion  = count / sum(count),
+           sample      = name,
+           tissue_type = paste(unique(as.character(cd$tissue_type)), collapse = ", ")) |> 
+    dplyr::rename(cell_type = all_of("new_cell_type"))
+})
+
+ggplot(prop_per_sample, aes(x = tissue_type, y = proportion, fill = tissue_type)) +
+  geom_boxplot(outlier.shape = 21) +
+  facet_wrap(~ cell_type, scales = "free_y") +
+  scale_fill_manual(values = c("sham" = "#1b9e77", "c26" = "#d95f02")) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Distribuzione proporzioni cell_type per tissue_type",
+       x = "Tissue type",
+       y = "Proporzione")
+
+ggsave("~/repositories/cachetic_visiumHD/figures/output_R/emma_RCTD_by_me/boxplot_celltype_prop_by_cond.png", width = 10, height = 6, dpi = 300)
+```
+
+
+
+
+#------------------------------------------------------------------------------#
+# Esploration of some genes
+
+```{r}
+marker_genes
+genes_of_interest <- c("Pax7", "Col6a3")
+```
+
+```{r}
+coords_df <- as.data.frame(spatialCoords(spe))
+  
+# 3. Extract the counts for just these genes, and log-transform them
+# (If you already have a "logcounts" assay, use assay(spe, "logcounts") instead of log1p)
+exprs_matrix <- as.matrix(assay(spe, "logcounts")[genes_of_interest, , drop = FALSE])
+exprs_df <- as.data.frame(t(exprs_matrix)) # Log transform for better plotting
+
+# 4. Extract cell metadata (assuming your cell types are in a column named 'Cell_Type')
+# Change "Cell_Type" to whatever your column is actually named in colData(spe)!
+meta_df <- as.data.frame(colData(spe))
+
+# 5. Bind it all together
+plot_df <- cbind(coords_df, exprs_df, meta_df)
+
+# 6. Make a 'long' version for facet_wrap plotting
+plot_df_long <- plot_df |> 
+  pivot_longer(cols = all_of(genes_of_interest), 
+               names_to = "Gene", 
+               values_to = "Log_Expression")
+```
+
+Distribution of Endothelial markers
+```{r}
+p1 <- plot_df_long |> 
+  # filter(sample_id == "YOUR_SAMPLE_NAME") |> # Uncomment this if you have multiple tissues!
+  # filter(Log_Expression > 0) |> # Uncomment this to hide cells with 0 expression
+  ggplot(aes(x = pxl_col_in_fullres, y = pxl_row_in_fullres, color = Log_Expression)) +
+  geom_point(size = 0.5) +
+  scale_y_reverse() + # Keeps the tissue right-side up!
+  scale_color_viridis_c(option = "magma") +
+  facet_wrap(~Gene) +
+  theme_void() + 
+  coord_fixed() + 
+  labs(title = "Spatial Distribution of MuSC Markers", color = "logcounts")
+
+print(p1)
+```
+
+Violin plots
+```{r}
+p2 <- ggplot(plot_df_long, aes(x = cell_type, y = Log_Expression, fill = cell_type)) +
+  geom_violin(scale = "width", alpha = 0.7, color = NA) +
+  # Adds tiny dots to show the actual cells inside the violins
+  geom_jitter(size = 0.5, alpha = 0.2, width = 0.2) +
+  facet_wrap(~Gene, ncol = 1, scales = "free_y") + # ncol=1 stacks them vertically for easier reading
+  theme_minimal() +
+  labs(title = "Expression by Cell Type", x = NULL, y = "Log(Counts + 1)") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "bold"),
+    legend.position = "none" # Hide the legend to save space
+  )
+
+print(p2)
+
+# saving
+file_path <- paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/emma_RCTD_by_me/violin_plots/MuSC_manual_celltypes.png")
+ggsave(
+      filename = file_path, 
+      plot = p2, 
+      width = 10, 
+      height = 7, 
+      dpi = 300, # High resolution for publications
+      bg = "white" # Prevents transparent backgrounds
+)
+```
+
+Function to do violin plot for everybody
+```{r}
+plot_marker_violins <- function(spe, marker_list, cell_type_col = "new_cell_type") {
+  
+  # Ensure the cell_type column exists and handle potential NAs
+  if (!cell_type_col %in% colnames(colData(spe))) {
+    stop(paste("Column", cell_type_col, "not found in colData(spe)."))
+  }
+  
+  # Store the plots in a list so you can view/save them later
+  plot_list <- list()
+  
+  # Loop through each cell type in your marker list
+  for (cell_type_name in names(marker_list)) {
+    
+    # 1. Get the requested genes for this cell type
+    genes_of_interest <- marker_list[[cell_type_name]]
+    
+    # Check if genes actually exist in the SPE object to prevent crashing
+    valid_genes <- intersect(genes_of_interest, rownames(spe))
+    
+    if (length(valid_genes) == 0) {
+      warning(paste("None of the genes for", cell_type_name, "were found in the SPE object. Skipping."))
+      next # Skip to the next cell type
+    }
+    
+    # 2. Extract Logcounts
+    exprs_matrix <- as.matrix(assay(spe, "logcounts")[valid_genes, , drop = FALSE])
+    exprs_df <- as.data.frame(t(exprs_matrix))
+    
+    # 3. Extract Metadata (we only need the cell type column to keep it fast)
+    meta_df <- as.data.frame(colData(spe)[, cell_type_col, drop = FALSE])
+    
+    # 4. Bind and reshape
+    plot_df <- cbind(meta_df, exprs_df) |> 
+      # Drop NAs in cell type so they don't plot as a weird "NA" column
+      filter(!is.na(.data[[cell_type_col]])) |> 
+      pivot_longer(
+        cols = all_of(valid_genes), 
+        names_to = "Gene", 
+        values_to = "Log_Expression"
+      )
+    
+    # 5. Create the plot!
+    p <- ggplot(plot_df, aes(x = .data[[cell_type_col]], y = Log_Expression, fill = .data[[cell_type_col]])) +
+      geom_violin(scale = "width", alpha = 0.7, color = NA) +
+      # Tiny dots to show density. (Rasterizing or alpha helps if you have 100k+ cells)
+      geom_jitter(size = 0.1, alpha = 0.1, width = 0.2, color = "black") +
+      facet_wrap(~Gene, ncol = 1, scales = "free_y") + 
+      theme_minimal() +
+      labs(
+        title = paste("Marker Genes for:", cell_type_name), 
+        x = NULL, 
+        y = "Log Expression"
+      ) +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "bold"),
+        legend.position = "none",
+        plot.title = element_text(face = "bold", size = 14)
+      )
+    
+    # Save the plot into the list, using the cell type as the name
+    plot_list[[cell_type_name]] <- p
+  }
+  
+  return(plot_list)
+}
+```
+
+
+```{r}
+# This runs the loop and saves all the plots into 'all_violins'
+all_violins <- plot_marker_violins(spe, marker_genes, cell_type_col = "new_cell_type")
+
+print(all_violins$Endothelial)
+
+walk(all_violins, print)
+```
+
+MuSC markers with old cell type annotations
+```{r}
+all_violins <- plot_marker_violins(spe, marker_genes, cell_type_col = "new_cell_type")
+```
+
+
+Save the plotting
+
+```{r}
+# This will run the loop and save everything automatically
+imap(all_violins, \(one_plot, one_name) {
+
+  markers_one_type <- marker_genes[[one_name]]
+  dynamic_height <- 3 + (length(markers_one_type) * 2)
+  file_path <- paste0("/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/output_R/emma_RCTD_by_me/violin_plots/", one_name, ".png")
+  ggsave(
+      filename = file_path, 
+      plot = one_plot, 
+      width = 10, 
+      height = dynamic_height, 
+      dpi = 300, # High resolution for publications
+      bg = "white" # Prevents transparent backgrounds
+    )
+  
+  })
+```
+
+```{r}
+scater::plotDots(
+  spe,
+  features = marker_genes,
+  group = "clusters",
+  assay.type = "logcounts"
+)
+```
+
+
+# -----------------------------------------------------------------------------#
+
+Esploration of the dataset
+
+```{r}
+spe
+```
+
+```{r}
+location <- rowRanges(spe)
+is.mito <- any(seqnames(location)%in% c("MT", "Mt", "mt"))
+
+sce.416b <- scuttle::addPerCellQCMetrics(spe, subsets=list(Mito=is.mito))
+colnames(colData(spe))
+```
+
