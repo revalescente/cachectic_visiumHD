@@ -230,7 +230,7 @@ for tissue_type in all_tissue_types:
             target_coordinate_system=fullres_coord_key
         )
         if not joined_treatment.empty:
-            ids_in_treatment = joined_treatment. index.unique()
+            ids_in_treatment = joined_treatment.index.unique()
             mask_treatment = tmp_sdata.tables[table_key].obs.index.isin(ids_in_treatment)
             tmp_sdata.tables[table_key].obs.loc[mask_treatment, 'in_treatment'] = True
             print(f"Marked {mask_treatment.sum()} nuclei as 'in_treatment'")

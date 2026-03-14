@@ -5,12 +5,18 @@ library(dplyr) # Optional, for data manipulation
 library(SpatialFeatureExperiment)
 library(Voyager)
 
+# Dear Emma,
+# read this website to understand what's going on, There are not so much comments in this file. x
+# https://robinsonlabuzh.github.io/pasta/02-imaging-univar-latSOD.html#global-measures
+
 # spatialexperiment of emma binned data - blocco 1 sham of interest
 spe_emma <- readRDS("/mnt/europa/valerio/data/Rdata/emma_16um_bin_annotated_spelist.RDS")
 
 spe <- spe_emma$c26_b4
 
-# read the parquet of the bins
+
+# read the parquet of the bins - Emma I think you can avoid these parquet, I don't know if you have them so... :) 
+# statistically it's almost the same! 
 bins <- read_parquet("/mnt/europa/valerio/data/zarr_store/binned_samples/version_1.0.0/blocco4_c26/shapes/blocco4_square_016um/shapes.parquet")
 bins$geometry <- st_as_sfc(bins$geometry, crs = NA) 
 bins_sf <- st_as_sf(bins)
@@ -41,6 +47,7 @@ head(joined_data)
 matched_info <- joined_data[match(colnames(spe), joined_data$bin_id), ]
 head(matched_info)
 
+# I think of you, Emma and think of you
 # creation of the SpatialFeatureExperiment object
 imgData(spe) <- NULL
 sfe <- toSpatialFeatureExperiment(spe)
@@ -94,9 +101,9 @@ sfe <- Voyager::runUnivariate(sfe,
 
 sfe <- Voyager::runBivariate(sfe,
                               feature1 = features[1],
-                              feature2 = features[2],
-                              colGraphName = "knn8",
-                              type = "localmoran_bv",
+                              feature2 = features[2],       # Ciao Emma, come va? un po annoiata immagino, 
+                              colGraphName = "knn8",        # be pero tra un paio d'ore (stima approssimativa) 
+                              type = "localmoran_bv",       # dovresti essere tra le mie braccia :) 
                               nsim = 100)
 
 p_f2_f1 <- Voyager::plotLocalResult(sfe, 
@@ -198,3 +205,5 @@ p_l2 <- plotLocalResult(
   size = 1
 )
 
+
+# :* brava hai fatto tutto!! I nostri capi saranno contenti!! S

@@ -20,7 +20,7 @@ from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 
 blocco = 'blocco2'
 
-img = io.imread(f"/mnt/europa/valerio/Fluo_images/warped_tif/blocco2_c26SMAD23.tif")
+img = io.imread("/mnt/europa/valerio/Fluo_images/warped_tif/blocchi/blocco2_c26SMAD23.tif")
 # print(img.shape, img.dtype)
 
 # 2nd channel correct, the other two no, fuck.

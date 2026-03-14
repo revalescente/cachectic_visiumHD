@@ -1,18 +1,21 @@
 import geopandas as gpd
 import pandas as pd
+import spatialdata as sd
 from spatialdata.models import ShapesModel
+from spatialdata.transformations import get_transformation
 import re
 import sopa
 import time
 import numpy as np
 from pathlib import Path
 import pandas as pd
-import spatialdata as sd
 from skimage.measure import regionprops_table
 from typing import List
 import matplotlib.pyplot as plt
 from scipy import sparse
 from shapely.geometry import Point
+import rasterio.features
+import shapely.geometry
 # from importlib import reload
 # reload(sf)
 
@@ -502,7 +505,47 @@ def postprocess_step(sdata,
   return sdata
 
 
+# function to fix polygons of arivis
 
+def precise_to_polygons(label_element):
+    """
+    Converts a SpatialData Label element to a gdf element 
+    without dropping small objects.
+    """
+    # 1. Get the raw numpy array (compute if it's a dask array)
+    # We cast to int32 to ensure rasterio handles it correctly
+    mask_arr = label_element.values.astype(np.int32)
+    # 2. Extract shapes using rasterio
+    # mask=mask_arr>0 ensures we only look at objects, not background
+    # connectivity=8 allows diagonal pixels to be part of the same object
+    shapes_gen = rasterio.features.shapes(mask_arr, mask=mask_arr > 0, connectivity=8)
+    geometries = []
+    ids = []
+    # 3. Iterate over the generator
+    for geom_shape, value in shapes_gen:
+        # Convert raw dict to Shapely Polygon
+        poly = shapely.geometry.shape(geom_shape)
+        # Determine the label ID
+        label_id = int(value)
+        geometries.append(poly)
+        ids.append(label_id)
+    # 4. Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(
+        {'geometry': geometries, 'label_id': ids}, 
+        index=ids
+    )
+    # 5. Handle fragmented cells (One label ID split into multiple polygons)
+    # If a cell is split, 'dissolve' merges them into a MultiPolygon
+    if len(ids) != len(np.unique(ids)):
+        print(f"Merging fragmented cells... (Raw polygons: {len(gdf)})")
+        gdf = gdf.dissolve(by='label_id', as_index=True)
+        gdf['label_id'] = gdf.index # Restore the column after dissolve
+    print(f"Final Polygon Count: {len(gdf)}")
+    # 6. Preserve original transformations (Physical coordinates)
+    # This ensures the polygons align with the image
+    
+    # 7. Return as a SpatialData ShapesModel
+    return gdf
 
 
 

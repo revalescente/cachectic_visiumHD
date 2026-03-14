@@ -16,14 +16,25 @@ import py_scripts.pp_sdata.pp_functions as pp
 geojson_dir = "/mnt/europa/valerio/data/json/geojson_dir/intissue_GFP_polys"
 blocco_key = 'blocco2'
 sample_key = 'c26'
-hires_key = f'{blocco_key}_hires_image'
+hires_key = 'hires_image'
 geojson_path = f"{geojson_dir}/{blocco_key}_{sample_key}.geojson"
+hires_key = 'full_image'
+fluo_key = 'fluo_image'
+
+# data dir:
+# blocco 2: /mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell
+# others: /mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0_cellexpans
+
+# nuclei dir:
+# /mnt/europa/valerio/data/arivis_cloud_segmentation/segmentation_masks
+
+# gfp poly 
 
 sdata = visium_hd(
         path= f"/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_3.1/{blocco_key}/outs",
         dataset_id=f"{blocco_key}",
         filtered_counts_file=False,
-        bin_size=['008','016'],
+        bin_size=['002','008','016'],
         bins_as_squares=True,
         annotate_table_by_labels=False,
         load_all_images=False,
@@ -53,7 +64,7 @@ intissue_poly = intissue_poly.set_crs(None, allow_override=True)
 intissue_rename = "intissue_poly"
 intissue_parse = ShapesModel.parse(intissue_poly, transformations = {blocco_key: Identity()})
 sdata.shapes[intissue_rename] = intissue_parse
-    
+
 # Extract bins shapes keeping the index 'location_id' for the filtering
 bins_key = [key for key in sdata.shapes if re.search(r'_square_008um$', key)][0]
 sdata[bins_key] = sdata[bins_key].reset_index()  # location_id becomes a column

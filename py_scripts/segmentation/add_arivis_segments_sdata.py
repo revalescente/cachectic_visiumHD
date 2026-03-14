@@ -18,42 +18,56 @@ from skimage.measure import regionprops_table
 #   data/manual_annotations/train_images_100_regions_background.ome.tiff \
 #   data/manual_annotations/tiff/train_images_100_regions_background.tiff
 
-# read the manual annotation - nuclei
-label_path = "/mnt/europa/valerio/data/arivis_cloud_segmentation/segmentation_masks/blocco1_sham_finalprediction.tif"
+# read the manual annotation - nuclei - it's a mask 
+label_path = "/mnt/europa/valerio/data/arivis_cloud_segmentation/segmentation_masks/blocco2_c26SMAD23_finalprediction.tiff"
 nuclei_arivis = skimage.io.imread(label_path).astype(int)
 
-print(f"Number of unique objects: {len(np.unique(selezioni)) - 1}") # subtract 1 for background (0)
+# number of nuclei in the mask
+unique_ids = np.unique(nuclei_arivis)
+num_objects = len(unique_ids) - 1 
+if num_objects < 0: num_objects = 0 # Safety check if mask is empty
 
-sdata = sd.read_zarr("/mnt/europa/valerio/data/zarr_store/samples/blocco1_sham.zarr")
+print(f"Number of objects: {num_objects}")
+
+sdata = sd.read_zarr("/mnt/europa/valerio/data/zarr_store/samples/blocco2_c26.zarr")
 
 # i need to transform the nuclei into the full_image coordinates system so i need to extract it first
 
-transf = get_transformation(sdata["full_image"], "blocco1")
+transf = get_transformation(sdata["full_image"], sdata.coordinate_systems[0])
 
 nuclei_arivis_parsed = Labels2DModel.parse(data=nuclei_arivis, 
-            transformations={"blocco1": transf},
+            transformations={"blocco2": transf},
             dims=("y", "x")
 )  
-sdata["label_nuclei_arivis"] = nuclei_arivis_parsed
+sdata["label_nuclei_arivis"] = nuclei_arivis_parsed 
 
 # plottino
+
 
 plt.figure(figsize=(20, 20))
 ax = plt.gca()
 sdata.query.bounding_box(
     axes=["x", "y"],
-    min_coordinate=[8000, 13000],
-    max_coordinate=[9000, 14000],
-    target_coordinate_system="blocco1",
+    min_coordinate=[12500, 14000],
+    max_coordinate=[14000, 15000],
+    target_coordinate_system=sdata.coordinate_systems[0],
 ).pl.render_images('full_image'
-).pl.render_labels('label_nuclei_arivis', color = "green"
-).pl.show(ax = ax, coordinate_systems="blocco1", save = 'output_python/arivis_nuclei.png')
-
+).pl.render_labels('label_nuclei_arivis'
+).pl.show(ax = ax, coordinate_systems=sdata.coordinate_systems[0], save = 'output_python/arivis_nuclei.png')
 # everything in the right place, it seems
 
 # transformation to polygons
 
-sdata["nuclei_arivis_poly"] = to_polygons(sdata["label_nuclei_arivis"])
+# Run the conversion
+nuclei_shapes = sf.precise_to_polygons(sdata["label_nuclei_arivis"])
+# parse polys
+transf = get_transformation(sdata["label_nuclei_arivis"], sdata.coordinate_systems[0])
+nuclei_shapes_parsed = ShapesModel.parse(nuclei_shapes, transformations = {"blocco2" : transf})
+# add to sdata the parsed polys
+sdata["nuclei_arivis_poly"] = nuclei_shapes_parsed
+
+# disable autosave for safe reasons
+sopa.settings.auto_save_on_disk = False
 
 # aggregate to obtain the matrix of gene vs arivis_nuclei
 sopa.utils.set_sopa_attrs(sdata, 
@@ -64,19 +78,32 @@ sopa.utils.set_sopa_attrs(sdata,
               bins_table_key='filtered'
  )
 
+# aggregation between 2um bins and nuclei polygons
 sopa.aggregate(sdata, key_added = 'arivis_nuclei', bins_key= "filtered",
   shapes_key = "nuclei_arivis_poly", expand_radius_ratio=0, min_transcripts=10,
   min_intensity_ratio=0.15, no_overlap = True
 )
 
+# visual check 
+plt.figure(figsize=(20, 20))
+ax = plt.gca()
+sdata.query.bounding_box(
+    axes=["x", "y"],
+    min_coordinate=[12500, 14000],
+    max_coordinate=[14000, 15000],
+    target_coordinate_system=sdata.coordinate_systems[0],
+).pl.render_images('full_image'
+).pl.render_shapes('nuclei_arivis_poly'
+).pl.show(ax = ax, coordinate_systems=sdata.coordinate_systems[0], save = 'output_python/arivis_nuclei_poly.png')
 
-element_extent = sd.get_extent(sdata['nuclei_arivis_poly'], coordinate_system='blocco1', exact=True)
+# feature extraction
+element_extent = sd.get_extent(sdata['nuclei_arivis_poly'], coordinate_system='blocco2', exact=True)
 sdata['raster_arivis_nuclei'] = sd.rasterize(
     sdata['nuclei_arivis_poly'],
     axes=["x", "y"],
     min_coordinate=[element_extent['x'][0], element_extent['y'][0]],
     max_coordinate=[element_extent['x'][1], element_extent['y'][1]],
-    target_coordinate_system='blocco1',
+    target_coordinate_system='blocco2',
     target_unit_to_pixels=1,
 )
 # 4. --- Prepare Label Mask ---
@@ -100,13 +127,13 @@ sdata['arivis_nuclei'].obs = sdata['arivis_nuclei'].obs.join(props_df[cols], how
 
 sdata.write_element('label_nuclei_arivis')
 sdata.write_element('raster_arivis_nuclei')
-sdata.delete_element_from_disk('arivis_nuclei')
+sdata.write_element('nuclei_arivis_poly')
 sdata.write_element('arivis_nuclei')
 
 #export adata
-adata = sdata[table_name].copy()
+adata = sdata['arivis_nuclei'].copy()
 adata.obs['x_coord'] = adata.obsm['spatial'][:, 0]
 adata.obs['y_coord'] = adata.obsm['spatial'][:, 1]
-
 del adata.obsm
-adata.write_h5ad('/mnt/europa/valerio/data/zarr_store/adatas/arivis_segmentation_tables/blocco1_sham.h5ad')
+
+adata.write_h5ad('/mnt/europa/valerio/data/zarr_store/adatas/arivis_segmentation_tables/blocco2_c26.h5ad')
