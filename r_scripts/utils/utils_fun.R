@@ -1,8 +1,8 @@
 library(purrr)
 library(ggplot2)
 library(SpatialExperiment)
-library(scuttle)
-library(SpaceTrooper)
+#library(scuttle)
+#library(SpaceTrooper)
 
 # negate a statement ----
 `%nin%` <- negate(`%in%`)

@@ -11,6 +11,39 @@ from spatialdata_io import visium_hd
 from spatialdata.transformations import Identity
 from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
 from py_scripts.utils.utils_fun import read_from_json
+from spatialdata import SpatialData
+
+def sjoin(
+    sdata: SpatialData,
+    left_element: str | gpd.GeoDataFrame,
+    right_element: str | gpd.GeoDataFrame,
+    how: str = "left",
+    target_coordinate_system: str | None = None,
+    **kwargs: int,
+) -> gpd.GeoDataFrame:
+    """Spatial join of two `shapes` GeoDataFrames, as in [geopandas.sjoin](https://geopandas.org/en/stable/docs/reference/api/geopandas.sjoin.html).
+
+    Shapes are automatically aligned on the same coordinate system (which can be chosen using the `target_coordinate_system` argument).
+
+    Args:
+        sdata: A `SpatialData` object
+        left_element: The name of a GeoDataFrame in `sdata`, or the GeoDataFrame itself
+        right_element: The name of a GeoDataFrame in `sdata`, or the GeoDataFrame itself
+        how: The GeoPandas type of join. By default, left geometries are retained.
+        target_coordinate_system: The name of the coordinate system on which the shapes will be transformed. By default, uses the intrinsic coordinate system of the `left_element`.
+        **kwargs: Kwargs provided to the [geopandas.sjoin](https://geopandas.org/en/stable/docs/reference/api/geopandas.sjoin.html) function
+
+    Returns:
+        The joined `GeoDataFrame`
+    """
+
+    if target_coordinate_system is None:
+        print("I need a coordinate system to work with")
+    else:
+        left_element = sdata.transform_element_to_coordinate_system(left_element, target_coordinate_system)
+        right_element = sdata.transform_element_to_coordinate_system(right_element, target_coordinate_system)
+
+    return gpd.sjoin(left_element, right_element, how=how, **kwargs)
 
 def preprocess_step(
     all=True, 

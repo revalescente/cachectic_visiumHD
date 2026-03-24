@@ -13,9 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 library(jsonlite)
 library(purrr)
 library(dplyr)
-library(scuttle)
+#library(scuttle)
 library(SpatialExperiment)
-library(SpatialFeatureExperiment)
+#library(SpatialFeatureExperiment)
 library(sf)
 library(sfarrow)
 # to read spatialdata objects
@@ -36,6 +36,7 @@ zarr_path = "/mnt/europa/valerio/data/zarr_store/samples/"
 poly_path = "/mnt/europa/valerio/data/zarr_store/samples/"
 sr_path = "/mnt/europa/valerio/data/zarr_store/adatas/spaceranger_tables/"
 adata_path = "/mnt/europa/valerio/data/zarr_store/adatas/samples_adata/"
+adata_arivis_path = "/mnt/europa/valerio/data/zarr_store/adatas/arivis_segmentation_tables/"
 ```
 
 # Concatenated samples
@@ -125,7 +126,8 @@ read_samples_adatas <- function(samples, data_path = "/mnt/europa/valerio/data/z
 ```
 
 ```{r}
-spe_list = read_samples_adatas(samples_key)
+samples_key_no2 <- samples_key[!grepl("blocco2", samples_key)]
+spe_list = read_samples_adatas(samples_key_no2, data_path = adata_arivis_path)
 #sce_list
 ```
 
@@ -603,6 +605,8 @@ saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_nocell_expans"))
 # spaceranger - blocco 1 e blocco2 cell expansion 2 microns
 saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_cell_expans_2um"))
 
+# arivis segmentation - tutto tranne il blocco 2
+saveRDS(spe_list, file = paste0(Rd_path, "spe_list_arivis_segmentation_no_b2.rds"))
 ```
 
 
