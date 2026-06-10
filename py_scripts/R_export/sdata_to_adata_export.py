@@ -32,7 +32,8 @@ sopa.settings.auto_save_on_disk = False
 
 # paths of interest
 sdata_dir = "/mnt/europa/valerio/data/zarr_store/arivis_plus_bins"
-output_dir = "/mnt/europa/valerio/data/zarr_store/adatas/arivis_segmentation_tables"
+output_dir1 = "/mnt/europa/valerio/data/zarr_store/adatas/binned_adatas/version_2.0.0/016um"
+output_dir2 = "/mnt/europa/valerio/data/zarr_store/adatas/binned_adatas/version_2.0.0/008um"
 
 
 # Load dictionary
@@ -48,7 +49,9 @@ print(f"\n{'='*50}")
 print(f"=== PROCESSING BLOCK: {BLOCCO_KEY} ===")
 print(f"{'='*50}")
 
-table_name = "arivis_nuclei_table"
+# table_name = "arivis_nuclei_table"
+table_name1 = "square_016um"
+table_name2 = "square_008um"
 
 for sample_name, sample_info in block_samples.items():
     print(f"\n--- Processing sample: {BLOCCO_KEY} - {sample_name} ---")
@@ -60,10 +63,15 @@ for sample_name, sample_info in block_samples.items():
     # sdata.delete_element_from_disk(table_name)
     # sdata.write_element(table_name)
     #export as adata to ease
-    adata = sdata[table_name].copy()
-    adata.obs['y_coord'] = adata.obsm['spatial'][:, 0]
-    adata.obs['x_coord'] = adata.obsm['spatial'][:, 1]
-    del adata.obsm
-    adata.write_h5ad(f'{output_dir}/{BLOCCO_KEY}_{sample_name}.h5ad')
+    adata1 = sdata[table_name1].copy()
+    adata1.obs['y_coord'] = adata1.obsm['spatial'][:, 0]
+    adata1.obs['x_coord'] = adata1.obsm['spatial'][:, 1]
+    adata2 = sdata[table_name2].copy()
+    adata2.obs['y_coord'] = adata2.obsm['spatial'][:, 0]
+    adata2.obs['x_coord'] = adata2.obsm['spatial'][:, 1]
+    del adata1.obsm
+    del adata2.obsm
+    adata1.write_h5ad(f'{output_dir1}/{BLOCCO_KEY}_{sample_name}.h5ad')
+    adata2.write_h5ad(f'{output_dir2}/{BLOCCO_KEY}_{sample_name}.h5ad')
 
 # Must remove obsm otherwise anndataR as_sce doesn't work... sadly

@@ -5,85 +5,174 @@ import spatialdata as sd
 from spatialdata_plot.pl.utils import set_zero_in_cmap_to_transparent
 import spatialdata_plot
 import matplotlib.pyplot as plt
-# from spatialdata.models import ShapesModel
-# from spatialdata.transformations import Identity, get_transformation
-# from skimage.measure import regionprops_table
-# import sopa
+import sopa
 
-sdata = sd.read_zarr("/mnt/europa/shared/sandri_visiumHD_data/bins/version_1.0.0/sdatas/blocco4_c26")
+# Grafico con i nuovi dati
 
-genes_faps = ["Pdgfra", "Ly6a", "Dcn"]
-gene_trim = "Trim63"
-gene_myh4 = "Myh4"
+sdata = sd.read_zarr("/mnt/europa/valerio/data/zarr_store/arivis_plus_bins/blocco4_c26")
+
+# mi servono:
+#             nuclei Trim63
+#             bin IIb azzurri
+#             bin myo grigi
+
+# prova 1, creo 2 colonne T/F 
+# prova 2, creo 2 colonne, una sulla tabella dei nuclei con trim63 1/0, e una su tab bin 1,2,0
+
+shape_nuclei = "nuclei_arivis_poly"
+shape_bin = "blocco4_square_016um"
+
+table_bin = "square_016um"
+table_nuclei = "arivis_nuclei_table"
+# create the first column
+# sdata["arivis_nuclei_table"].obs["trim_check"] = sdata["arivis_nuclei_table"].obs["nuclei_types"] == "Myonuclei_Trim63"
+# sdata["square_016um"].obs["IIb_check"] = sdata["square_016um"].obs["bin_types"] == "Myonuclei_IIb"
+
+# Creates a column of 1s and 0s
+sdata[table_nuclei].obs["trim_check"] = (sdata[table_nuclei].obs["nuclei_types"] == "Myonuclei_Trim63").astype(int)
+sdata[table_bin].obs["IIb_check"] = (sdata[table_bin].obs["bin_types"] == "Myonuclei_IIb").astype(int)
+sdata[table_bin].obs["myo_check"] = (sdata[table_bin].obs["bin_types"] != "Myonuclei_IIb").astype(int)
 
 # to have invisible shapes where the values == 0 use this cmap
 #user_def_cmap = "cividis"
-user_def_cmap = "plasma"
-new_cmap = set_zero_in_cmap_to_transparent(cmap=user_def_cmap)
+nuclei_color = "plasma"
+cmap_nuclei = set_zero_in_cmap_to_transparent(cmap=nuclei_color)
+IIb_color = "cool"
+cmap_IIb = set_zero_in_cmap_to_transparent(cmap=IIb_color)
+myo_color = "grey"
+cmap_myo = set_zero_in_cmap_to_transparent(cmap="grey")
 
-shape_name = "intissue_008um"
+# 2. Filter for IIb_check == 1
+table_filtered = sdata[table_bin][sdata[table_bin].obs["IIb_check"] == 1].copy()
 
-# 1. Access the specific table from your sdata object
-# Assuming you want to modify 'square_008um'
-adata = sdata.tables['square_008um']
+sdata["table_IIb"] = table_filtered
+prova = sd.match_element_to_table(sdata, shape_bin, "table_IIb")
+sdata['IIb_to_plot'] = prova[0]['blocco4_square_016um']
 
-# 2. Replicate R: spe$faps <- colSums(counts(spe[genes_faps, ])) > 0
-# We sum across the gene axis (axis=1) for the selected genes
-faps_mask = adata[:, genes_faps].X.sum(axis=1).A1 > 0
-adata.obs['faps'] = faps_mask
+sdata['table_IIb'].uns = {'spatialdata_attrs': {'instance_key': 'location_id', 'region': ['IIb_to_plot'], 'region_key': 'region'}}
+sdata['table_IIb'].obs['region'] = "IIb_to_plot"
+sdata['table_IIb'].obs['region'] = sdata['table_IIb'].obs['region'].astype('category')
 
-# 3. Replicate R: counts(spe)["Gene", ]
-# Extract raw counts for specific genes
-adata.obs['trim'] = adata[:, "Trim63"].X.toarray().flatten()
-adata.obs['myh4'] = adata[:, "Myh4"].X.toarray().flatten()
 
-# 4. Replicate R: df$faps_plot <- ifelse(df$faps, TRUE, NA)
-# We use np.where to handle the conditional mapping
-adata.obs['faps_plot'] = np.where(adata.obs['faps'], True, np.nan)
+# final plot
+fig, ax = plt.subplots(figsize=(20, 20))
+#ax.set_facecolor('black')        # Set the plot area to black
 
-# 5. Replicate R: log1p transformations
-# Note: log1p is natural log(1 + x)
-adata.obs['trim_plot'] = np.log1p(adata.obs['trim'])
-adata.obs['myh4_plot'] = np.log1p(adata.obs['myh4'])
-
-# 6. Update the table back in the sdata object (if not modified in-place)
-sdata.tables['square_008um'] = adata
-
-plt.figure(figsize=(20, 20))
-ax = plt.gca()
-# 1. Specify the column name in 'color'
-# 2. Ensure 'groups' or 'palette' is used if it's categorical
-sdata.pl.render_shapes(
-    shape_name, 
-    color="trim_plot",  # Add your column name here,
-    table_name = "square_008um",
-    outline=False, 
-    #outline_alpha=1, 
-    #outline_width=0, 
-    fill_alpha=1,               # Increased slightly to see the 'new column' data
-    cmap=new_cmap
-).pl.show(
-    ax=ax, 
-    coordinate_systems="blocco4", 
-    save="output_python/grafico_emma.png"
-)
- 
-fig = plt.figure(figsize=(20, 20))
-ax = plt.gca()
-ax.set_facecolor('black')        # Set the plot area to black
-sdata.pl.render_shapes(
-    shape_name, 
+sdata.pl.render_images(
+  "blocco4_full_image"
+).pl.render_shapes(
+    'IIb_to_plot', 
     outline=False, 
     outline_alpha=0, 
     fill_alpha=1,
-    color="trim_plot",
-    table_name="square_008um",
-    cmap=new_cmap
+    color="lightblue",
+    #cmap=cmap_IIb,
+    table_name = "table_IIb"
+).pl.render_shapes(
+    shape_nuclei, 
+    outline=False, 
+    outline_alpha=0, 
+    fill_alpha=1,
+    color="trim_check",
+    cmap = cmap_nuclei
 ).pl.show(
     ax=ax, 
-    title=f"Aspect Ratio {sdata.path.stem}", 
-    coordinate_systems="blocco4"
+    title="Seconda prova grafico emma", 
+    coordinate_systems="blocco4" # make sure this matches your coordinate system
 )
-save_path = "/mnt/europa/valerio/figures/grafico_emma2.png"
-plt.savefig(save_path, facecolor='black', dpi=300, bbox_inches='tight')
-plt.close()
+
+# 6. Save and close
+save_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/grafico_forsefinale_img.png"
+fig.savefig(save_path, dpi=300, bbox_inches='tight')
+plt.close(fig)
+
+
+
+
+# add grey mionuclei
+mask = (
+    sdata[table_bin].obs["bin_types"].str.startswith("Myonuclei_") & 
+    (sdata[table_bin].obs["bin_types"] != "Myonuclei_IIb")
+)
+# Convert True/False to 1/0 and assign to a new column
+sdata[table_bin].obs["Myo_other_check"] = mask.astype(int)
+
+# Verify the result
+print(sdata[table_bin].obs.groupby("bin_types")["Myo_other_check"].value_counts())
+
+table_filtered = sdata[table_bin][sdata[table_bin].obs["Myo_other_check"] == 1].copy()
+
+sdata["table_myo"] = table_filtered
+prova = sd.match_element_to_table(sdata, shape_bin, "table_myo")
+sdata['Myo_to_plot'] = prova[0]['blocco4_square_016um']
+
+sdata['table_myo'].uns = {'spatialdata_attrs': {'instance_key': 'location_id', 'region': ['Myo_to_plot'], 'region_key': 'region'}}
+sdata['table_myo'].obs['region'] = "Myo_to_plot"
+sdata['table_myo'].obs['region'] = sdata['table_myo'].obs['region'].astype('category')
+
+
+# final plot
+fig, ax = plt.subplots(figsize=(20, 20))
+#ax.set_facecolor('black')        # Set the plot area to black
+sdata.pl.render_images(
+  "blocco4_full_image"
+).pl.render_shapes(
+    'IIb_to_plot', 
+    outline=False, 
+    outline_alpha=0, 
+    fill_alpha=1,
+    color="lightblue",
+    #cmap=cmap_IIb,
+    table_name = "table_IIb"
+).pl.render_shapes(
+    shape_nuclei, 
+    outline=False, 
+    outline_alpha=0, 
+    fill_alpha=1,
+    color="trim_check",
+    cmap = cmap_nuclei
+).pl.show(
+    ax=ax, 
+    title="Grafico per emma", 
+    coordinate_systems="blocco4" # make sure this matches your coordinate system
+)
+# 6. Save and close
+save_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/grafico_emma_conimg.png"
+fig.savefig(save_path, dpi=300, bbox_inches='tight')
+plt.close(fig)
+
+# final plot
+fig, ax = plt.subplots(figsize=(20, 20))
+#ax.set_facecolor('black')        # Set the plot area to black
+sdata.pl.render_shapes(
+    'IIb_to_plot', 
+    outline=False, 
+    outline_alpha=0, 
+    fill_alpha=1,
+    color="lightblue",
+    #cmap=cmap_IIb,
+    table_name = "table_IIb"
+).pl.render_shapes(
+    'Myo_to_plot', 
+    outline=False, 
+    outline_alpha=0, 
+    fill_alpha=1,
+    color="grey",
+    #cmap=cmap_IIb,
+    table_name = "table_myo"
+).pl.render_shapes(
+    shape_nuclei, 
+    outline=False, 
+    outline_alpha=0, 
+    fill_alpha=1,
+    color="trim_check",
+    cmap = cmap_nuclei
+).pl.show(
+    ax=ax, 
+    title="Grafico per emma", 
+    coordinate_systems="blocco4" # make sure this matches your coordinate system
+)
+# 6. Save and close
+save_path = "/mnt/europa/valerio/repositories/cachetic_visiumHD/figures/grafico_emma_noimg.png"
+fig.savefig(save_path, dpi=300, bbox_inches='tight')
+plt.close(fig)

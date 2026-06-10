@@ -37,6 +37,7 @@ poly_path = "/mnt/europa/valerio/data/zarr_store/samples/"
 sr_path = "/mnt/europa/valerio/data/zarr_store/adatas/spaceranger_tables/"
 adata_path = "/mnt/europa/valerio/data/zarr_store/adatas/samples_adata/"
 adata_arivis_path = "/mnt/europa/valerio/data/zarr_store/adatas/arivis_segmentation_tables/"
+adata_016um_path = "/mnt/europa/valerio/data/zarr_store/adatas/binned_adatas/version_2.0.0/016um/"
 ```
 
 # Concatenated samples
@@ -127,7 +128,8 @@ read_samples_adatas <- function(samples, data_path = "/mnt/europa/valerio/data/z
 
 ```{r}
 samples_key_no2 <- samples_key[!grepl("blocco2", samples_key)]
-spe_list = read_samples_adatas(samples_key_no2, data_path = adata_arivis_path)
+samples_key_b2 <- samples_key[grepl("blocco2", samples_key)]
+spe_list = read_samples_adatas(samples_key_b2, data_path = adata_016um_path)
 #sce_list
 ```
 
@@ -605,8 +607,10 @@ saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_nocell_expans"))
 # spaceranger - blocco 1 e blocco2 cell expansion 2 microns
 saveRDS(sr_spe_list, file = paste0(Rd_path, "spaceranger_spe_cell_expans_2um"))
 
-# arivis segmentation - tutto tranne il blocco 2
+# arivis segmentation - e 016um new pipelined
 saveRDS(spe_list, file = paste0(Rd_path, "spe_list_arivis_segmentation_no_b2.rds"))
+saveRDS(spe_list_all, file = paste0(Rd_path, "spe_list_arivis_segmentation.rds"))
+saveRDS(spe_list, file = paste0(Rd_path, "spe_list_016um_b2.rds"))
 ```
 
 
