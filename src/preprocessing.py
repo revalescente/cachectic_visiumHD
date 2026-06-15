@@ -10,7 +10,7 @@ import spatialdata as sd
 from spatialdata_io import visium_hd
 from spatialdata.transformations import Identity
 from spatialdata.models import (ShapesModel, TableModel, Image2DModel)
-from utils_fun import read_from_json
+from general_utils import read_from_json
 from spatialdata import SpatialData
 
 def sjoin(
@@ -259,4 +259,3 @@ def divide_samples(samples_dict,
             except AssertionError as e:
                 print(f"Sanity check failed for {blocco}_{sample}: {e}")
     return print("Job done!")  
-
