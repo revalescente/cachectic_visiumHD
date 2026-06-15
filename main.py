@@ -32,16 +32,13 @@ sopa.settings.auto_save_on_disk = False
 
 # paths of interest
 intissue_gfp_dir = "/mnt/europa/valerio/data/json/geojson_dir/intissue_GFP_polys"
-data_b2 = "/mnt/europa/data/sandri/241219_A00626_0902_AHWH77DMXY_3/space_out_4.0nocell"
 arivis_dir = "/mnt/europa/valerio/data/arivis_cloud_segmentation/segmentation_masks"
 fullres_dir = "/mnt/europa/valerio/HE_images/color_corrected/blocchi"
 fluo_path = "/mnt/europa/valerio/Fluo_images/warped_tif/samples"
 save_dir = "/mnt/europa/valerio/data/zarr_store/arivis_plus_bins"
 
 # Load dictionary
-samples_dict = read_from_json(
-    "/mnt/europa/valerio/repositories/cachetic_visiumHD/json/blocco_sample_bbox_dict.json"
-)
+samples_dict = read_from_json("json/blocco_sample_bbox_dict.json")
 
 if BLOCCO_KEY not in samples_dict:
     print(f"[ERROR] {BLOCCO_KEY} not found in dictionary.")
