@@ -1,6 +1,5 @@
 import argparse
 import json
-from pathlib import Path
 
 from .merge import merge_tiff
 from .split import split_tiff
