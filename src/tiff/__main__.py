@@ -8,14 +8,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=["split", "merge"])
     parser.add_argument("block")
-    parser.add_argument("--samples-json")
+    parser.add_argument("--json")
     parser.add_argument("--image")
     parser.add_argument("--images-dir")
     parser.add_argument("--output-dir")
     parser.add_argument("--output")
     args = parser.parse_args()
 
-    with open(args.samples_json) as f:
+    with open(args.json) as f:
         samples = json.load(f)[args.block]
 
     if args.mode == "split":
@@ -25,10 +25,12 @@ if __name__ == "__main__":
 
 
 # EXAMPLES
-# python split_merge_tiff.py split blocco1 \
-#     --image data/full_blocco1.tiff \
-#     --output-dir data/split_blocco1
+# python -m src.tiff split blocco1 \
+#    --json data/samples.json \
+#     --image "data/H&E/Project_BLOCCO_1_ch00.tif" \
+#     --output-dir "data/H&E/Project_BLOCCO_1_ch00"
 #
-# python split_merge_tiff.py merge blocco1 \
-#     --images-dir data/split_blocco1 \
-#     --output data/merged_blocco1.tiff
+# python -m src.tiff merge blocco1 \
+#    --json data/samples.json \
+#     --images-dir "data/H&E/Project_BLOCCO_1_ch00" \
+#     --output "data/H&E/Project_BLOCCO_1_ch00_rec.tif"
