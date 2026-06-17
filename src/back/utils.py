@@ -11,7 +11,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import rasterio.features
+from rasterio import features
 import shapely.geometry
 import sopa
 import spatialdata as sd
@@ -629,42 +629,32 @@ def postprocess_step(
     return sdata
 
 
-# function to fix polygons of arivis
-
-
 def precise_to_polygons(label_element):
-    """
-    Converts a SpatialData Label element to a gdf element
-    without dropping small objects.
-    """
-    # 1. Get the raw numpy array (compute if it's a dask array)
-    # We cast to int32 to ensure rasterio handles it correctly
-    mask_arr = label_element.values.astype(np.int32)
-    # 2. Extract shapes using rasterio
-    # mask=mask_arr>0 ensures we only look at objects, not background
-    # connectivity=8 allows diagonal pixels to be part of the same object
-    shapes_gen = rasterio.features.shapes(mask_arr, mask=mask_arr > 0, connectivity=8)
-    geometries = []
-    ids = []
-    # 3. Iterate over the generator
-    for geom_shape, value in shapes_gen:
-        # Convert raw dict to Shapely Polygon
-        poly = shapely.geometry.shape(geom_shape)
-        # Determine the label ID
-        label_id = int(value)
-        geometries.append(poly)
-        ids.append(label_id)
-    # 4. Create GeoDataFrame
-    gdf = gpd.GeoDataFrame({"geometry": geometries, "label_id": ids}, index=ids)
-    # 5. Handle fragmented cells (One label ID split into multiple polygons)
-    # If a cell is split, 'dissolve' merges them into a MultiPolygon
-    if len(ids) != len(np.unique(ids)):
-        print(f"Merging fragmented cells... (Raw polygons: {len(gdf)})")
-        gdf = gdf.dissolve(by="label_id", as_index=True)
-        gdf["label_id"] = gdf.index  # Restore the column after dissolve
-    print(f"Final Polygon Count: {len(gdf)}")
-    # 6. Preserve original transformations (Physical coordinates)
-    # This ensures the polygons align with the image
+    mask = label_element.values.astype(np.int32)
 
-    # 7. Return as a SpatialData ShapesModel
+    geometries = []
+    label_ids = []
+
+    for geometry, label_id in features.shapes(
+        mask,
+        mask=mask > 0,
+        connectivity=8,
+    ):
+        geometries.append(shapely.geometry.shape(geometry))
+        label_ids.append(int(label_id))
+
+    gdf = gpd.GeoDataFrame(
+        {"label_id": label_ids, "geometry": geometries},
+        index=pd.Index(label_ids),
+    )
+
+    gdf = gdf.dissolve(by="label_id", as_index=True)
+    gdf["label_id"] = gdf.index
+
     return gdf
+
+
+def save_gdf(gdf, output_path):
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    gdf.to_file(output_path, driver="GeoJSON")

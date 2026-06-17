@@ -34,3 +34,8 @@ if __name__ == "__main__":
 #    --json data/samples.json \
 #     --images-dir "data/H&E/Project_BLOCCO_1_ch00" \
 #     --output "data/H&E/Project_BLOCCO_1_ch00_rec.tif"
+
+# python -m src.tiff merge blocco1 \
+#    --json data/samples.json \
+#     --images-dir "data/ARVIS/arivis_blocco1" \
+#     --output "data/ARVIS/Project_BLOCCO_1_ch00.tif"
