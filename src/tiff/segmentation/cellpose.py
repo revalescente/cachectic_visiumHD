@@ -16,7 +16,7 @@ def segment_image(image: np.ndarray, scale: int = 1, gpu: bool = False) -> np.nd
         batch_size=32,
         flow_threshold=0.4,
         cellprob_threshold=0.0,
-        normalize={"tile_norm_blocksize": 0},
+        normalize=True,
     )
 
     if scale == 1:
