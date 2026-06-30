@@ -1,0 +1,4 @@
+dask-image
+geopandas
+spatialdata
+spatialdata-io

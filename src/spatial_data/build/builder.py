@@ -1,13 +1,10 @@
-import json
+import os
 import shutil
 from pathlib import Path
 
 import geopandas as gpd
-import numpy as np
-import rasterio
-import rasterio.features
-import shapely.geometry
-from spatialdata.models import Labels2DModel
+from dask_image.imread import imread as dask_imread
+from spatialdata.models import Image2DModel
 from spatialdata.models import ShapesModel
 from spatialdata.transformations import (
     Sequence,
@@ -16,6 +13,8 @@ from spatialdata.transformations import (
     set_transformation,
 )
 from spatialdata_io import visium_hd
+
+from src.geojson_parser import load_samples, rotated_rectangle, sample_bounds
 
 
 def write_sdata(sdata, path, overwrite=True):
@@ -37,31 +36,8 @@ def find_fullres_image_key(sdata, block):
     return next(iter(sdata.images))
 
 
-def read_label_raster(path):
-    with rasterio.open(path) as src:
-        return src.read(1)
-
-
-def mask_to_polygons(mask):
-    geometries = []
-    labels = []
-    mask = np.asarray(mask)
-    for geometry, label_id in rasterio.features.shapes(
-        mask.astype(np.int32),
-        mask=mask > 0,
-        connectivity=8,
-    ):
-        geometries.append(shapely.geometry.shape(geometry))
-        labels.append(int(label_id))
-
-    gdf = gpd.GeoDataFrame({"label_id": labels, "geometry": geometries}, index=labels)
-    if len(labels) != len(set(labels)):
-        gdf = gdf.dissolve(by="label_id")
-        gdf["label_id"] = gdf.index.astype(int)
-    return gdf.set_crs(None, allow_override=True)
-
-
 def add_geojson_shapes(sdata, path, key, coordinate_system, transformation):
+    os.environ.setdefault("OGR_GEOJSON_MAX_OBJ_SIZE", "0")
     gdf = gpd.read_file(path).set_crs(None, allow_override=True)
     gdf.attrs = {}
     sdata.shapes[key] = ShapesModel.parse(
@@ -71,28 +47,31 @@ def add_geojson_shapes(sdata, path, key, coordinate_system, transformation):
     return gdf
 
 
-def add_label_mask(
-    sdata,
-    path,
-    labels_key,
-    shapes_key,
-    coordinate_system,
-    transformation,
-    make_polygons=True,
-):
-    mask = read_label_raster(path)
-    sdata.labels[labels_key] = Labels2DModel.parse(
-        mask,
-        dims=("y", "x"),
+def read_image(path):
+    image = dask_imread(str(path))
+    if image.ndim >= 3 and image.shape[0] == 1:
+        image = image[0]
+    return image
+
+
+def image_dims(image):
+    if image.ndim == 2:
+        return ("y", "x")
+    if image.ndim == 3 and image.shape[-1] in (1, 3, 4):
+        return ("y", "x", "c")
+    if image.ndim == 3 and image.shape[0] in (1, 3, 4):
+        return ("c", "y", "x")
+    raise ValueError(f"Unsupported image shape: {image.shape}")
+
+
+def add_image(sdata, path, key, coordinate_system, transformation):
+    image = read_image(path)
+    sdata.images[key] = Image2DModel.parse(
+        image,
+        dims=image_dims(image),
         transformations={coordinate_system: transformation},
     )
-    if make_polygons:
-        polygons = mask_to_polygons(mask)
-        sdata.shapes[shapes_key] = ShapesModel.parse(
-            polygons,
-            transformations={coordinate_system: transformation},
-        )
-    return mask
+    return image
 
 
 def add_local_coordinate_system(
@@ -120,11 +99,12 @@ def build_block(
     block,
     spaceranger_path,
     fullres_image_path,
-    nuclei_labels_path,
-    fibres_labels_path,
+    wga_rgb_image_path=None,
+    nuclei_polygons_path=None,
+    fibres_polygons_path=None,
+    background_polygons_path=None,
     roi_metadata_path=None,
     areas_of_interest_path=None,
-    make_fibre_polygons=True,
 ):
     sdata = visium_hd(
         path=spaceranger_path,
@@ -144,6 +124,15 @@ def build_block(
     image_key = find_fullres_image_key(sdata, block)
     transformation = get_transformation(sdata.images[image_key], to_coordinate_system=block)
 
+    if wga_rgb_image_path is not None:
+        add_image(
+            sdata,
+            wga_rgb_image_path,
+            f"{block}_wga_gfp_dapi_rgb_image",
+            block,
+            transformation,
+        )
+
     if roi_metadata_path is not None:
         add_geojson_shapes(
             sdata,
@@ -162,22 +151,32 @@ def build_block(
             transformation,
         )
 
-    nuclei_mask = read_label_raster(nuclei_labels_path)
-    sdata.labels["nuclei_arvis_labels"] = Labels2DModel.parse(
-        nuclei_mask,
-        dims=("y", "x"),
-        transformations={block: transformation},
-    )
+    if nuclei_polygons_path is not None:
+        add_geojson_shapes(
+            sdata,
+            nuclei_polygons_path,
+            "nuclei_arvis_shapes",
+            block,
+            transformation,
+        )
 
-    add_label_mask(
-        sdata,
-        fibres_labels_path,
-        "fibres_cellpose_labels",
-        "fibres_cellpose_shapes",
-        block,
-        transformation,
-        make_polygons=make_fibre_polygons,
-    )
+    if fibres_polygons_path is not None:
+        add_geojson_shapes(
+            sdata,
+            fibres_polygons_path,
+            "fibres_cellpose_shapes",
+            block,
+            transformation,
+        )
+
+    if background_polygons_path is not None:
+        add_geojson_shapes(
+            sdata,
+            background_polygons_path,
+            "background_mask_shapes",
+            block,
+            transformation,
+        )
 
     return sdata
 
@@ -186,23 +185,25 @@ def crop_samples(sdata, block, samples):
     sample_sdatas = {}
     for sample_name, sample_info in samples.items():
         sample_key = sample_info.get("sample_key", f"{block}_{sample_name}")
+        x0, y0, x1, y1 = sample_bounds(sample_info)
         sample_sdata = sdata.query.bounding_box(
             axes=["x", "y"],
-            min_coordinate=sample_info["min_coordinate"],
-            max_coordinate=sample_info["max_coordinate"],
+            min_coordinate=[x0, y0],
+            max_coordinate=[x1, y1],
             target_coordinate_system=block,
         )
         add_local_coordinate_system(
             sample_sdata,
             source_coordinate_system=block,
             local_coordinate_system=sample_key,
-            min_coordinate=sample_info["min_coordinate"],
+            min_coordinate=[x0, y0],
         )
         sample_sdata.attrs["block_id"] = block
         sample_sdata.attrs["sample_id"] = sample_name
         sample_sdata.attrs["sample_key"] = sample_key
-        sample_sdata.attrs["crop_min_coordinate"] = sample_info["min_coordinate"]
-        sample_sdata.attrs["crop_max_coordinate"] = sample_info["max_coordinate"]
+        sample_sdata.attrs["crop_min_coordinate"] = [x0, y0]
+        sample_sdata.attrs["crop_max_coordinate"] = [x1, y1]
+        sample_sdata.attrs["rotated_rectangle"] = rotated_rectangle(sample_info)
         sample_sdatas[sample_key] = sample_sdata
     return sample_sdatas
 
@@ -212,28 +213,29 @@ def build_block_and_samples(
     samples_json,
     spaceranger_path,
     fullres_image_path,
-    nuclei_labels_path,
-    fibres_labels_path,
     output_dir,
+    wga_rgb_image_path=None,
+    nuclei_polygons_path=None,
+    fibres_polygons_path=None,
+    background_polygons_path=None,
     roi_metadata_path=None,
     areas_of_interest_path=None,
-    make_fibre_polygons=True,
     write_block=True,
     overwrite=True,
 ):
-    with open(samples_json) as f:
-        samples = json.load(f)[block]
+    samples = load_samples(samples_json, block)
 
     output_dir = Path(output_dir)
     sdata = build_block(
         block=block,
         spaceranger_path=spaceranger_path,
         fullres_image_path=fullres_image_path,
-        nuclei_labels_path=nuclei_labels_path,
-        fibres_labels_path=fibres_labels_path,
+        wga_rgb_image_path=wga_rgb_image_path,
+        nuclei_polygons_path=nuclei_polygons_path,
+        fibres_polygons_path=fibres_polygons_path,
+        background_polygons_path=background_polygons_path,
         roi_metadata_path=roi_metadata_path,
         areas_of_interest_path=areas_of_interest_path,
-        make_fibre_polygons=make_fibre_polygons,
     )
 
     paths = {}

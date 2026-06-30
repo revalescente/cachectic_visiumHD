@@ -1,11 +1,11 @@
-import json
-
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio
 from matplotlib.patches import Rectangle
 from rasterio.windows import Window
+
+from src.geojson_parser import load_samples, sample_bounds
 
 
 def image_size(path):
@@ -51,8 +51,7 @@ def read_label_window(path, x0, y0, width, height):
 
 
 def sample_bbox(info):
-    x0, y0 = info["min_coordinate"]
-    x1, y1 = info["max_coordinate"]
+    x0, y0, x1, y1 = sample_bounds(info)
     return int(x0), int(y0), int(x1 - x0), int(y1 - y0)
 
 
@@ -155,7 +154,9 @@ def plot_sample_windows(
     samples,
     size=1400,
 ):
-    fig, axes = plt.subplots(1, len(samples), figsize=(6 * len(samples), 6), constrained_layout=True)
+    fig, axes = plt.subplots(
+        1, len(samples), figsize=(6 * len(samples), 6), constrained_layout=True
+    )
     if len(samples) == 1:
         axes = [axes]
     for ax, (sample_name, info) in zip(axes, samples.items()):
@@ -175,5 +176,4 @@ def plot_sample_windows(
 
 
 def read_samples(path, block):
-    with open(path) as f:
-        return json.load(f)[block]
+    return load_samples(path, block)

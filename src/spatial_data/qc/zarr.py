@@ -55,11 +55,17 @@ def plot_zarr(
     labels_keys = guess_labels_keys(sdata) if labels_keys is None else labels_keys
     shapes_keys = guess_shapes_keys(sdata) if shapes_keys is None else shapes_keys
 
-    plotter = sdata.pl.render_images(image_key)
+    plotter = getattr(sdata, "pl").render_images(image_key)
     for labels_key in labels_keys:
         plotter = plotter.pl.render_labels(labels_key, alpha=0.35)
     for shapes_key in shapes_keys:
-        plotter = plotter.pl.render_shapes(shapes_key, outline=True)
+        plotter = plotter.pl.render_shapes(
+            shapes_key,
+            fill_alpha=0.35,
+            outline_width=1.0,
+            outline_color="black",
+            outline_alpha=1.0,
+        )
 
     kwargs = {}
     if coordinate_system is not None:
