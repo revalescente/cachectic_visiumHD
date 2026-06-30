@@ -1,3 +1,6 @@
 data/
 INPUTS/
 OUTPUTS/
+
+.DS_Store
+INPUTS.zip
