@@ -1,0 +1,6 @@
+geopandas
+numpy
+rasterio
+shapely
+scikit-image
+tifffile

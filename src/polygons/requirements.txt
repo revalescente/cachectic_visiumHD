@@ -1,0 +1,7 @@
+geopandas
+numpy
+pandas
+rasterio
+shapely
+spatialdata
+tifffile
